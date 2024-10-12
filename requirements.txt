@@ -1,0 +1,8 @@
+numpy==2.1.1
+omegaconf==2.3.0
+torch==2.4.1
+lightning==2.4.0
+torchvision==0.19.1
+requests==2.32.3
+pillow==10.4.0
+einops==0.8.0
