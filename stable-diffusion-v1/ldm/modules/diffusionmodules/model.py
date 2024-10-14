@@ -8,6 +8,7 @@ from einops import rearrange
 
 from ldm.modules.attention import LinearAttention
 from ldm.util import instantiate_from_config
+from ldm.modules.distributions.distributions import DiagonalGaussianDistribution
 
 
 def get_timestep_embedding(timesteps, embedding_dim):
