@@ -7,3 +7,4 @@ jupyter_core==5.7.2
 debugpy==1.8.6
 black==24.8.0
 matplotlib-inline==0.1.7
+matplotlib==3.9.2

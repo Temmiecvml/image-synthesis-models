@@ -169,15 +169,16 @@ if __name__ == "__main__":
             gpuinfo = trainer_config["gpus"]
             print(f"Running on GPUs {gpuinfo}")
             cpu = False
-            
+
         trainer_opt = argparse.Namespace(**trainer_config)
         lightning_config.trainer = trainer_config
 
         # model
         sample_input = torch.ones(1, 3, 256, 256)
+        c = ["I am a demo"]
         model = instantiate_from_config(config.model)
 
-        output = model(sample_input)
+        output = model(sample_input, c)
 
         # trainer and callbacks
         trainer_kwargs = dict()

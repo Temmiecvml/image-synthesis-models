@@ -277,7 +277,7 @@ class Attention(nn.Module):
             mem=None
     ):
         b, n, _, h, talking_heads, device = *x.shape, self.heads, self.talking_heads, x.device
-        kv_input = default(context, x)
+        kv_input = default(context, x) # return context if it exists else x
 
         q_input = x
         k_input = kv_input
