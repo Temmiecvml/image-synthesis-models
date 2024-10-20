@@ -8,6 +8,7 @@ from PIL import Image
 from abc import abstractmethod
 from functools import partial
 from torch.utils.data import Dataset, IterableDataset, DataLoader, random_split
+
 # from pytorch_lightning.utilities.distributed import rank_zero_only
 from pytorch_lightning.callbacks import ModelCheckpoint, Callback, LearningRateMonitor
 from pytorch_lightning.utilities import rank_zero_info
@@ -16,9 +17,10 @@ from ldm.util import instantiate_from_config
 
 
 class Txt2ImgIterableBaseDataset(IterableDataset):
-    '''
+    """
     Define an interface to make the IterableDatasets for text2img data chainable
-    '''
+    """
+
     def __init__(self, num_records=0, valid_ids=None, size=256):
         super().__init__()
         self.num_records = num_records
@@ -26,7 +28,7 @@ class Txt2ImgIterableBaseDataset(IterableDataset):
         self.sample_ids = valid_ids
         self.size = size
 
-        print(f'{self.__class__.__name__} dataset contains {self.__len__()} examples.')
+        print(f"{self.__class__.__name__} dataset contains {self.__len__()} examples.")
 
     def __len__(self):
         return self.num_records
@@ -65,7 +67,7 @@ def worker_init_fn(_):
         return np.random.seed(np.random.get_state()[1][current_id] + worker_id)
     else:
         return np.random.seed(np.random.get_state()[1][0] + worker_id)
-    
+
 
 class DataModuleFromConfig(pl.LightningDataModule):
     def __init__(
@@ -183,7 +185,7 @@ class DataModuleFromConfig(pl.LightningDataModule):
             num_workers=self.num_workers,
             worker_init_fn=init_fn,
         )
-    
+
 
 class SetupCallback(Callback):
     def __init__(self, resume, now, logdir, ckptdir, cfgdir, config, lightning_config):

@@ -104,7 +104,6 @@ def get_parser(**parser_kwargs):
     return parser
 
 
-
 if __name__ == "__main__":
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     parser = get_parser()
@@ -116,11 +115,11 @@ if __name__ == "__main__":
             "If you want to resume training in a new log folder, "
             "use -n/--name in combination with --resume_from_checkpoint"
         )
-    
+
     if opt.resume:
         if not os.path.exists(opt.resume):
             raise ValueError("Cannot find {}".format(opt.resume))
-        
+
         if os.path.isfile(opt.resume):
             paths = opt.resume.split("/")
             logdir = "/".join(paths[:-2])
@@ -174,8 +173,8 @@ if __name__ == "__main__":
         lightning_config.trainer = trainer_config
 
         # model
-        sample_input = torch.ones(1, 3, 256, 256)
-        c = ["I am a demo"]
+        sample_input = torch.ones(2, 3, 256, 256)
+        c = ["I am a demo", "I am a cat"]
         model = instantiate_from_config(config.model)
 
         output = model(sample_input, c)

@@ -138,7 +138,6 @@ def retrieve(
         return list_or_dict, success
 
 
-
 def instantiate_from_config(config):
     if not "target" in config:
         if config == "__is_first_stage__":
