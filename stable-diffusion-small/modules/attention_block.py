@@ -65,7 +65,7 @@ class VAttentionBlock(nn.Module):
             .reshape(-1, height * width, self.head_channels)
         )
 
-        x, attn = compute_attention(q, k, v)
+        x, _ = compute_attention(q, k, v)
 
         # Reshape x back to (batch_size, num_heads, head_channels, height, width)
         x = (
@@ -73,7 +73,7 @@ class VAttentionBlock(nn.Module):
             .permute(0, 1, 3, 2)
             .reshape(batch_size, self.in_channels, height, width)
         )
-        x = self.out(x)
         x = x + residual
+        x = self.out(x)
 
         return x
