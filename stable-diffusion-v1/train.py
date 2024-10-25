@@ -173,7 +173,7 @@ if __name__ == "__main__":
         lightning_config.trainer = trainer_config
 
         # model
-        sample_input = torch.ones(2, 3, 256, 256)
+        sample_input = torch.ones(2, 3, 64, 64)
         c = ["I am a demo", "I am a cat"]
         model = instantiate_from_config(config.model)
 

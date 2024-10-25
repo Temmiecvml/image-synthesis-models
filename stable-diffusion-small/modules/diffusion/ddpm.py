@@ -3,22 +3,9 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from einops import rearrange
+
 from modules.autoencoder.decoder import UpScale
-
-
-def reshape_for_attention(
-    x: torch.Tensor, image_shape: Optional[Tuple[int, int]] = None
-):
-    if not image_shape:
-        b, c, h, w = x.shape
-        x = x.view(b, c, -1).permute(0, 2, 1)
-    else:
-        b, s, c = x.shape
-        h, w = image_shape
-        assert s == h * w, "Shape mismatch"
-        x = x.permute(0, 2, 1).view(b, c, h, w)
-
-    return x
 
 
 class TimeEmbedding(nn.Module):
@@ -51,64 +38,147 @@ class SwitchSequential(nn.Sequential):
         return x
 
 
-class CrossAttentionBlock(nn.Module):
+class CrossAttention(nn.Module):
     def __init__(
-        self, num_heads: int, dims: int, context: int = 768, in_proj_bias: bool = False
+        self, query_dim, num_heads=8, dim_heads=64, context_dims=None, dropout=0.0
+    ):
+        super().__init__()
+
+        inner_dims = dim_heads * num_heads
+        self.scale = dim_heads**-0.5
+        self.num_heads = num_heads
+        context_dims = context_dims or query_dim
+
+        # its self attention if context_dims is None
+        self.to_q = nn.Linear(query_dim, inner_dims, bias=False)
+        self.to_k = nn.Linear(context_dims, inner_dims, bias=False)
+        self.to_v = nn.Linear(context_dims, inner_dims, bias=False)
+
+        self.to_out = nn.Sequential(
+            nn.Linear(inner_dims, query_dim), nn.Dropout(dropout)
+        )
+
+    def forward(self, x, context=None):
+        context = context or x
+        q = self.to_q(x)
+        k = self.to_k(context)
+        v = self.to_v(context)
+
+        q, k, v = map(
+            lambda t: rearrange(t, "b n (h d) -> (b h) n d", h=self.num_heads),
+            (q, k, v),
+        )
+
+        w = q @ k.transpose(-2, -1) * self.scale
+        w = F.softmax(w, dim=-1)
+        out = w @ v
+        out = rearrange(out, "(b h) n d -> b n (h d)", h=self.num_heads)
+        out = self.to_out(out)
+
+        return out
+
+
+class GEGLU(nn.Module):
+    def __init__(self, dim_in, dim_out):
+        super().__init__()
+        self.proj = nn.Linear(dim_in, dim_out * 2)
+
+    def forward(self, x):
+        x, gate = self.proj(x).chunk(2, dim=-1)
+        return x * F.gelu(gate)
+
+
+class TransformerBlock(nn.Module):
+    def __init__(
+        self,
+        dims: int,
+        num_heads: int,
+        dim_heads: int,
+        context_dims: int,
+        dropout: float = 0.0,
     ):
         super().__init__()
         self.num_heads = num_heads
         self.dims = dims
-        self.context = context
-        self.in_proj_bias = in_proj_bias
-        self.attention = nn.MultiheadAttention(
-            dims, num_heads, batch_first=True, bias=False
+        self.dim_heads = dim_heads
+        self.context_dims = context_dims
+
+        # self attention
+        self.attn1 = CrossAttention(
+            query_dim=dims,
+            num_heads=num_heads,
+            dim_heads=dim_heads,
+            context_dims=None,
+            dropout=dropout,
         )
-        self.linear_context = nn.Linear(context, dims, bias=False)
-        self.linear_out = nn.Linear(dims, dims, bias=False)
+
+        # cross attention
+        self.attn2 = CrossAttention(
+            query_dim=dims,
+            num_heads=num_heads,
+            dim_heads=dim_heads,
+            context_dims=context_dims,
+            dropout=dropout,
+        )
+
+        self.ff = nn.Sequential(
+            GEGLU(dims, dims * 2),
+            nn.Dropout(dropout),
+            nn.Linear(dims * 2, dims),
+        )
+
+        self.norm1 = nn.LayerNorm(dims)
+        self.norm2 = nn.LayerNorm(dims)
+        self.norm3 = nn.LayerNorm(dims)
 
     def forward(self, x, context):
-        pass
+        h = self.attn1(self.norm1(x), None) + x # self attention
+        h = self.attn2(self.norm2(h), context) + h # cross attention
+        h = self.ff(self.norm3(h)) + h
+        return h
 
 
 class UNetCrossAttentionBlock(nn.Module):
-    def __init__(self, num_heads: int, dims: int, context: int = 768, groups: int = 32):
-        channels = num_heads * dims
-        self.group_norm = nn.GroupNorm(32, channels, eps=1e-6)
-        self.conv = nn.Conv2d(channels, channels, kernel_size=3, padding=0)
-        self.layer_norm_1 = nn.LayerNorm(channels)
-        self.attention_1 = nn.MultiheadAttention(
-            channels, num_heads, batch_first=True, bias=False
+    def __init__(
+        self,
+        channels: int,
+        num_heads: int = 8,
+        context_dims: int = 192,
+        depth: int = 1,
+        groups: int = 32,
+    ):
+
+        self.channels = channels
+        self.num_heads = num_heads
+        self.context_dims = context_dims
+        self.dim_heads = dim_heads = channels // num_heads
+        self.norm = nn.GroupNorm(groups, channels, eps=1e-6)
+        self.proj_in = nn.Conv2d(channels, channels, kernel_size=1, stride=1, padding=0)
+
+        self.transformer_blocks = nn.ModuleList(
+            [
+                TransformerBlock(channels, num_heads, dim_heads, context_dims)
+                for _ in range(depth)
+            ]
         )
-        self.layer_norm_2 = nn.LayerNorm(channels)
-        self.attention_2 = CrossAttentionBlock(
-            num_heads, channels, context, in_proj_bias=False
+
+        self.proj_out = nn.Conv2d(
+            channels, channels, kernel_size=1, stride=1, padding=0
         )
-        self.layer_norm_3 = nn.LayerNorm(channels)
-        self.linear_gelu_1 = nn.Linear(channels, 4 * 2 * channels)
-        self.linear_gelu_2 = nn.Linear(4 * channels, 2 * channels)
-        self.conv_out = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
 
     def forward(self, x, context):
-        image_shape = x.shape[-2:]
-        h = self.group_norm(x)
-        h = self.conv(h)
-        h_atn = reshape_for_attention(h)
-        h_atn = self.layer_norm_1(h_atn)
-        h_atn = self.attention_1(h_atn, h_atn, h_atn)[0]
-        h += h_atn
+        b, c, ih, iw = x.shape
 
-        h_atn = self.layer_norm_2(h)
-        h_atn = self.attention_2(h_atn, context)
-        h += h_atn
+        h = self.norm(x)
+        h = self.proj_in(h)
+        h = rearrange(h, "b c h w -> b (h w) c")  # flatten image dims
+        for block in self.transformer_blocks:
+            h = block(h, context)
 
-        h_proj = self.layer_norm_3(h)
-        h_proj, gate = self.linear_gelu_1(h_proj).chunk(2, dim=-1)
-        h_proj = h_proj * F.gelu(gate)
-        h_proj = self.linear_gelu_2(h_proj)
-        h += h_proj
-        h = reshape_for_attention(h, image_shape)
-        h = self.conv_out(h)
+        h = rearrange(h, "b (h w) c -> b c h w", h=ih, w=iw)  # unflatten image dims
+        h = self.proj_out(h)
         h += x
+
         return h
 
 
@@ -117,32 +187,35 @@ class UNetResidualBlock(nn.Module):
         self,
         in_channels: int,
         out_channels: int,
-        n_timesteps: int = 1280,
+        time_embedding_dims: int = 768,
         groups: int = 32,
+        dropout: float = 0.0,
     ):
         super().__init__()
-        self.group_norm_1 = nn.GroupNorm(groups, in_channels)
-        self.conv_1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
-        self.linear_time = nn.Linear(n_timesteps, out_channels)
+        self.in_layers = nn.Sequential(
+            nn.GroupNorm(groups, in_channels, eps=1e-5, affine=True),
+            nn.SiLU(),
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+        )
 
-        self.group_norm_2 = nn.GroupNorm(groups, out_channels)
-        self.conv_2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
+        self.linear_time = nn.Linear(time_embedding_dims, out_channels)
 
-        if in_channels == out_channels:
-            self.skip = nn.Identity()
-        else:
-            self.skip = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
+        self.out_layers = nn.Sequential(
+            nn.GroupNorm(groups, out_channels, eps=1e-5, affine=True),
+            nn.SiLU(),
+            nn.Dropout(p=dropout),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+        )
+        self.skip = (
+            nn.Identity()
+            if in_channels == out_channels
+            else nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
+        )
 
     def forward(self, x, t):
-
-        h = self.group_norm_1(h)
-        h = F.silu(h)
-        h = self.conv_1(h)
-        h = self.linear_time(F.silu(t))[:, :, None, None] + h
-
-        h = self.group_norm_2(h)
-        h = F.silu(h)
-        h = self.conv_2(h)
+        h = self.in_layers(x)
+        h = h + self.linear_time(F.silu(t))[:, :, None, None]
+        h = self.out_layers(h)
         h = h + self.skip(x)
 
         return h
@@ -152,29 +225,33 @@ class UNet(nn.Module):
 
     def __init__(
         self,
-        base_dims: int = 320,
-        base_attention_dims: int = 40,
-        num_heads: int = 8,
-        in_dims: int = 4,
-        out_groups: int = 32,
+        base_dims: int = 192,
+        base_context_dims: int = 192,
+        time_embedding_dims: int = 768,
+        num_heads: int = 6,
+        in_dims: int = 3,
         out_dims: int = 4,
+        groups: int = 32,
     ):
         super().__init__()
 
         self.encoder = nn.ModuleList(
             [  # f=8
-                SwitchSequential(
+                SwitchSequential(  # 3 -> 192
                     nn.Conv2d(in_dims, base_dims, kernel_size=3, padding=1)
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims, base_dims),
-                    UNetCrossAttentionBlock(num_heads, base_attention_dims),
-                ),
-                SwitchSequential(
-                    UNetResidualBlock(base_dims, base_dims),
-                    UNetCrossAttentionBlock(num_heads, base_attention_dims),
+                    UNetResidualBlock(base_dims, base_dims, time_embedding_dims),
+                    UNetResidualBlock(base_dims, base_dims, time_embedding_dims),
+                    nn.Conv2d(base_dims, base_dims, kernel_size=3, stride=2, padding=1),
                 ),
                 # f=16
+                SwitchSequential(
+                    UNetResidualBlock(base_dims, base_dims * 2, time_embedding_dims),
+                    UNetCrossAttentionBlock(
+                        base_dims * 2, num_heads, base_context_dims * 2
+                    ),
+                ),
                 SwitchSequential(
                     nn.Conv2d(base_dims, base_dims, kernel_size=3, stride=2, padding=1)
                 ),
@@ -183,7 +260,9 @@ class UNet(nn.Module):
                     UNetCrossAttentionBlock(num_heads, base_attention_dims * 2),
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 2, base_dims * 2),
+                    UNetResidualBlock(
+                        base_dims * 2, base_dims * 2, time_embedding_dims
+                    ),
                     UNetCrossAttentionBlock(num_heads, base_attention_dims * 2),
                 ),
                 # f=32
@@ -193,11 +272,15 @@ class UNet(nn.Module):
                     )
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 2, base_dims * 4),
+                    UNetResidualBlock(
+                        base_dims * 2, base_dims * 4, time_embedding_dims
+                    ),
                     UNetCrossAttentionBlock(num_heads, base_attention_dims * 4),
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 4, base_dims * 4),
+                    UNetResidualBlock(
+                        base_dims * 4, base_dims * 4, time_embedding_dims
+                    ),
                     UNetCrossAttentionBlock(num_heads, base_attention_dims * 4),
                 ),
                 # f=64
@@ -207,18 +290,22 @@ class UNet(nn.Module):
                     )
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 4, base_dims * 4),
+                    UNetResidualBlock(
+                        base_dims * 4, base_dims * 4, time_embedding_dims
+                    ),
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 4, base_dims * 4),
+                    UNetResidualBlock(
+                        base_dims * 4, base_dims * 4, time_embedding_dims
+                    ),
                 ),
             ]
         )
 
         self.bottle_neck = SwitchSequential(
-            UNetResidualBlock(base_dims * 4, base_dims * 4),
+            UNetResidualBlock(base_dims * 4, base_dims * 4, time_embedding_dims),
             UNetCrossAttentionBlock(num_heads, base_attention_dims * 4),
-            UNetResidualBlock(base_dims * 4, base_dims * 4),
+            UNetResidualBlock(base_dims * 4, base_dims * 4, time_embedding_dims),
         )
 
         # decoder receive double number of channels as input because of the skip connections
@@ -226,54 +313,72 @@ class UNet(nn.Module):
             [
                 # f=32
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 8, base_dims * 4),
+                    UNetResidualBlock(
+                        base_dims * 8, base_dims * 4, time_embedding_dims
+                    ),
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 8, base_dims * 4),
+                    UNetResidualBlock(
+                        base_dims * 8, base_dims * 4, time_embedding_dims
+                    ),
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 8, base_dims * 4),
+                    UNetResidualBlock(
+                        base_dims * 8, base_dims * 4, time_embedding_dims
+                    ),
                     UpScale(base_dims * 4, base_dims * 4),
                 ),
                 # f=16
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 8, base_dims * 4),
+                    UNetResidualBlock(
+                        base_dims * 8, base_dims * 4, time_embedding_dims
+                    ),
                     UNetCrossAttentionBlock(num_heads, base_attention_dims * 4),
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 8, base_dims * 4),
+                    UNetResidualBlock(
+                        base_dims * 8, base_dims * 4, time_embedding_dims
+                    ),
                     UNetCrossAttentionBlock(num_heads, base_attention_dims * 4),
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 6, base_dims * 4),
+                    UNetResidualBlock(
+                        base_dims * 6, base_dims * 4, time_embedding_dims
+                    ),
                     UNetCrossAttentionBlock(num_heads, base_attention_dims * 4),
                     UpScale(base_dims * 4, base_dims * 4),
                 ),
                 # f=8
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 6, base_dims * 2),
+                    UNetResidualBlock(
+                        base_dims * 6, base_dims * 2, time_embedding_dims
+                    ),
                     UNetCrossAttentionBlock(num_heads, base_attention_dims * 2),
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 4, base_dims * 2),
+                    UNetResidualBlock(
+                        base_dims * 4, base_dims * 2, time_embedding_dims
+                    ),
                     UNetCrossAttentionBlock(num_heads, base_attention_dims * 2),
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 3, base_dims * 2),
+                    UNetResidualBlock(
+                        base_dims * 3, base_dims * 2, time_embedding_dims
+                    ),
                     UNetCrossAttentionBlock(num_heads, base_attention_dims * 2),
                     UpScale(base_dims * 2, base_dims * 2),
                 ),
                 # f=4
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 3, base_dims),
+                    UNetResidualBlock(base_dims * 3, base_dims, time_embedding_dims),
                     UNetCrossAttentionBlock(num_heads, base_attention_dims),
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 2, base_dims),
+                    UNetResidualBlock(base_dims * 2, base_dims, time_embedding_dims),
                     UNetCrossAttentionBlock(num_heads, base_attention_dims * 2),
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 2, base_dims),
+                    UNetResidualBlock(base_dims * 2, base_dims, time_embedding_dims),
                     UNetCrossAttentionBlock(num_heads, base_attention_dims),
                 ),
             ]
@@ -286,5 +391,10 @@ class UNet(nn.Module):
         )
 
     def forward(self, x, context, t):
+
+        hs = []
+        for module in self.encoder:
+            h = module(x, context, t)
+            hs.append(h)
 
         out = self.output(x)
