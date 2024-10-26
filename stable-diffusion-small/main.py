@@ -24,12 +24,15 @@ if __name__ == "__main__":
 
     try:
         config = OmegaConf.merge(*[OmegaConf.load(cfg) for cfg in opt.base])
-        sample_input = torch.ones(2, 3, 256, 256)
+        sample_input = torch.ones(2, 3, 64, 64)
         c = ["I am a demo", "I am a cat"]
-        model = instantiate_object(config.autoencoder)
-        recon_x, mean, log_var = model(sample_input)
+        # model = instantiate_object(config.autoencoder)
+        # recon_x, mean, log_var = model(sample_input)
 
-        print("Model output shape: ", recon_x.shape)
+        # print("Model output shape: ", recon_x.shape)
+
+        diffusion_model = instantiate_object(config.ddpm)
+        o = diffusion_model(sample_input, c)
 
     except Exception as e:
         print(e)

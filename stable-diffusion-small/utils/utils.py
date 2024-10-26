@@ -15,3 +15,9 @@ def instantiate_object(config, reload=False):
     object = getattr(module_imp, cls)(**params)
 
     return object
+
+
+def extract_into_tensor(a, t, x_shape):
+    b, *_ = t.shape
+    out = a.gather(-1, t)
+    return out.reshape(b, *((1,) * (len(x_shape) - 1)))

@@ -1,17 +1,40 @@
 autoencoder:
-  base_learning_rate: 2.0e-06
   target: models.autoencoder.VAutoEncoder
   params:
     learning_rate: 0.5
     encoder_config:
       target: modules.autoencoder.encoder.VEncoder
       params:
-        base_channels: 128
+        base_channels: 192
         num_groups: 32
         z_scale_factor: 0.18215
     decoder_config:
       target: modules.autoencoder.decoder.VDecoder
       params:
-        base_channels: 128
+        base_channels: 192
         num_groups: 32
         z_scale_factor: 0.18215
+
+ddpm:
+  target: models.ddpm.DDPM
+  params:
+    unet_config:
+      target: modules.diffusion.ddpm.UNet
+      params:
+        base_dims: 192
+        base_context_dims: 640
+        time_embedding_dims: 768
+        num_heads: 6
+        in_dims: 3
+        out_dims: 4
+        groups: 32
+
+    timestep_config:
+      target: modules.diffusion.ddpm.TimeEmbedding
+      params:
+        dims: 192
+        
+    num_timesteps: 1000
+    beta: 0.6
+    noise_level: 0.5
+   
