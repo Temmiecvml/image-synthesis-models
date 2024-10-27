@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from modules.attention_block import VAttentionBlock
-from modules.residual_block import VResidualBlock
+from .attention_block import VAttentionBlock
+from .residual_block import VResidualBlock
 
 
 class Conv2Pad(nn.Module):
