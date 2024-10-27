@@ -32,9 +32,15 @@ ddpm:
     timestep_config:
       target: modules.diffusion.ddpm.TimeEmbedding
       params:
-        dims: 192
+        dims: 192 # base_dims
+
+    text_conditioner_config:
+      target: modules.clip.TextConditioner
+      params:
+        dims: 512
+        out_dims: 640
+        num_heads: 8
+        clip_model: ViT-B/32
         
+    beta_schedule: linear
     num_timesteps: 1000
-    beta: 0.6
-    noise_level: 0.5
-   

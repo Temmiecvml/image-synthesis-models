@@ -9,6 +9,7 @@ from modules.autoencoder.decoder import UpScale
 class TimeEmbedding(nn.Module):
     def __init__(self, dims: int = 192):
         super().__init__()
+        self.dims = dims
         self.linear_1 = nn.Linear(dims, 4 * dims)
         self.linear_2 = nn.Linear(4 * dims, 4 * dims)
 

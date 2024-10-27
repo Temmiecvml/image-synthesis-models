@@ -5,14 +5,11 @@ import torch.nn.functional as F
 
 def compute_attention(q, k, v):
     # Scale by sqrt(head_channels)
-    scale_factor = q.shape[-1] ** 0.5
-    q = q / scale_factor
-    k = k / scale_factor
-
+    scale_factor = q.shape[-1] ** -0.5
     # q: (batch_size * num_heads, seq_len, head_channels)
     # k: (batch_size * num_heads, head_channels, seq_len)
-    attn = torch.bmm(
-        q, k.transpose(-1, -2)
+    attn = (
+        torch.bmm(q, k.transpose(-1, -2)) * scale_factor
     )  # (batch_size * num_heads, seq_len, seq_len)
 
     # Apply softmax to the attention scores
