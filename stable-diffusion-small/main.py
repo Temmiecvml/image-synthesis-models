@@ -25,7 +25,7 @@ if __name__ == "__main__":
     try:
         config = OmegaConf.merge(*[OmegaConf.load(cfg) for cfg in opt.base])
         sample_input = torch.ones(2, 3, 64, 64)
-        c = ["I am a demo", "I am a cat"]
+        c = ["I am a demo", "I am a cat", ""]
         # model = instantiate_object(config.autoencoder)
         # recon_x, mean, log_var = model(sample_input)
 

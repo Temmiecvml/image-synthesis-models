@@ -30,6 +30,14 @@ class TextConditioner(nn.Module):
         self.projection = nn.Linear(dims, out_dims)
         self.to(device)
 
+    def set_device(self, device):
+        self.device = device
+        self.clip.to(device)
+        self.attn.to(device)
+        self.norm.to(device)
+        self.projection.to(device)
+        self.to(device)
+
     def forward(self, query):
         with torch.no_grad():
             q = self.clip(query, device=self.device)

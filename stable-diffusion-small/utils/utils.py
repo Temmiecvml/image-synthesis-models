@@ -1,4 +1,19 @@
 import importlib
+import os
+from typing import Optional
+
+import torch
+from omegaconf import OmegaConf
+from PIL import Image
+from torchvision import transforms
+
+
+def load_trained_model(config, ckpt_path: str = ""):
+
+    if not ckpt_path:
+        model = instantiate_object(config)
+
+    return model
 
 
 def instantiate_object(config, **kwargs):
@@ -19,3 +34,74 @@ def extract_into_tensor(a, t, x_shape):
     b, *_ = t.shape
     out = a.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
+
+
+def load_images_to_tensor(image_dir, image_width: int = 256, transformations=None):
+    """
+    Loads all images from the specified directory, preprocesses them, and
+    converts them into a single PyTorch tensor.
+
+    Parameters:
+    - image_dir (str): Path to the directory containing images.
+    - image_size (tuple): Desired size (width, height) for resizing images.
+
+    Returns:
+    - torch.Tensor: A 4D tensor of shape (N, C, H, W), where N is the number
+                    of images, C is the number of channels, and H, W are height and width.
+    """
+    if not transformations:
+        transform = transforms.Compose(
+            [
+                transforms.Resize(image_width),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
+
+    image_tensors = []
+    for filename in os.listdir(image_dir):
+        img_path = os.path.join(image_dir, filename)
+
+        if filename.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif")):
+            image = Image.open(img_path).convert("RGB")
+            image_tensor = transform(image)
+            image_tensors.append(image_tensor)
+
+    if len(image_tensors) > 0:
+        return torch.stack(image_tensors)
+    else:
+        raise ValueError("No images found in the specified directory.")
+
+
+def tensor_to_pil_images(tensor_batch):
+    """
+    Converts a batch of PyTorch tensors to a list of PIL images.
+
+    Parameters:
+    - tensor_batch (torch.Tensor): A 4D tensor of shape (N, C, H, W) where
+                                   N is the batch size, C is 1 or 3 channels,
+                                   and values are in range [0, 1] or [0, 255].
+
+    Returns:
+    - List[PIL.Image.Image]: A list of PIL images.
+    """
+    # Check if input is 4D tensor
+    if tensor_batch.ndim != 4 or tensor_batch.shape[1] != 3:
+        raise ValueError("Expected tensor of shape (N, C, H, W) with 1 or 3 channels.")
+
+    pil_images = []
+    for img_tensor in tensor_batch:
+        if (
+            img_tensor.dtype in [torch.float32, torch.float16]
+            and img_tensor.max() <= 1.0
+        ):
+            img_tensor = img_tensor * 255
+
+        img_tensor = img_tensor.to(torch.uint8).cpu()
+
+        pil_image = transforms.ToPILImage()(img_tensor)
+        pil_images.append(pil_image)
+
+    return pil_images

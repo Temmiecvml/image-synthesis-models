@@ -24,6 +24,10 @@ class VAutoEncoder(pl.LightningModule):
 
         return recon_x, mean, log_var
 
+    def decode(self, z):
+        recon_x = self.decoder(z)
+        return recon_x
+
     def training_step(self, batch, batch_idx):
         x, _ = batch
         recon_x, mu, logvar = self(x)

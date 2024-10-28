@@ -51,10 +51,10 @@ class Down(nn.Module):
             nn.GroupNorm(num_groups, base_channels * 4),
             nn.SiLU(),
             # f=8
-            nn.Conv2d(base_channels * 4, base_channels // 16, kernel_size=3, padding=1),
+            nn.Conv2d(base_channels * 4, base_channels // 32, kernel_size=3, padding=1),
             # f=8
             nn.Conv2d(
-                base_channels // 16, base_channels // 16, kernel_size=3, padding=1
+                base_channels // 32, base_channels // 32, kernel_size=3, padding=1
             ),
         )
 

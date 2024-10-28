@@ -1,15 +1,12 @@
 from functools import partial
+from typing import List, Optional
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
 
-from utils import (
-    extract_into_tensor,
-    instantiate_object,
-    make_beta_schedule,
-    timestep_embedding,
-)
+from utils import (extract_into_tensor, instantiate_object, make_beta_schedule,
+                   timestep_embedding)
 
 
 class DDPM(pl.LightningModule):
@@ -27,6 +24,7 @@ class DDPM(pl.LightningModule):
         self.text_conditioner = instantiate_object(
             text_conditioner_config, device=str(self.device)
         )
+        self.text_conditioner_idle = False
         self.num_timesteps = int(num_timesteps)
         self.create_schedule(beta_schedule, num_timesteps)
 
@@ -52,7 +50,15 @@ class DDPM(pl.LightningModule):
             "sqrt_one_minus_alphas_cumprod", to_torch(np.sqrt(1.0 - alphas_cumprod))
         )
 
-    def get_context_embedding(self, context):
+    def idle_text_conditioner(self, idle_device: str, idle: bool = True):
+        if idle:
+            self.text_conditioner = self.text_conditioner.set_device(idle_device)
+            self.text_conditioner_idle = True
+        else:
+            self.text_conditioner = self.text_conditioner.set_device(self.device)
+            self.text_conditioner_idle = False
+
+    def get_context_embedding(self, context: List[str]):
         """
         Get the conditioning text embedding
         Conditioner is
@@ -65,7 +71,10 @@ class DDPM(pl.LightningModule):
             for a max sequence length of 77, and output dims of 640
             we get an output shape of (batch_size, 77, 640)å
         """
-        context = self.text_conditioner(context)
+        if not self.text_conditioner_idle:
+            context = self.text_conditioner(context)
+        else:
+            raise ValueError("Text conditioner is idle")
 
         return context
 
@@ -77,9 +86,11 @@ class DDPM(pl.LightningModule):
 
         return t_embed
 
-    def sample_noisy_image(self, x_start, t):
+    def sample_noisy_image(self, x_start, t, noise):
         """Diffusion forward pass"""
-        noise = torch.randn_like(x_start, device=self.device)
+        if noise is None:
+            noise = torch.randn_like(x_start, device=self.device)
+
         sqrt_alphas_cum_prod_t = extract_into_tensor(
             self.sqrt_alphas_cumprod, t, x_start.shape
         )
@@ -93,25 +104,31 @@ class DDPM(pl.LightningModule):
 
         return noisy_image
 
-    def _forward(self, x, context, t):
-        x_noisy = self.sample_noisy_image(x, t)
-        t_embeddings = self.get_timestep_embedding(t)
-        x_output = self.unet(x_noisy, context, t_embeddings)
-
-        loss = 0
-
-        return loss
-
     def forward(
         self,
         x: torch.Tensor,
-        context: torch.Tensor,
+        context: List[str],
+        noise: Optional[torch.Tensor] = None,
     ):
         t = torch.randint(
             0, self.num_timesteps, (x.shape[0],), device=self.device
         ).long()
 
         context = self.get_context_embedding(context)
-        loss = self._forward(x, context, t)
+        x_noisy = self.sample_noisy_image(x, t, noise)
+        t_embeddings = self.get_timestep_embedding(t)
+        x_output = self.unet(x_noisy, context, t_embeddings)
+
+        return x_output
+
+    def apply_model(self, x_noisy, context, t):
+        context = self.get_context_embedding(context)
+        t_embeddings = self.get_timestep_embedding(t)
+        x_output = self.unet(x_noisy, context, t_embeddings)
+
+        return x_output
+
+    def training_step(self, batch, batch_idx):
+        loss = 0
 
         return loss
