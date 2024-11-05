@@ -1,0 +1,29 @@
+ddpm:
+  target: models.ddpm.DDPM
+  params:
+    unet_config:
+      target: modules.diffusion.ddpm.UNet
+      params:
+        base_dims: 192
+        base_context_dims: 640
+        time_embedding_dims: 768
+        num_heads: 6
+        in_dims: 4
+        out_dims: 4
+        groups: 32
+
+    timestep_config:
+      target: modules.diffusion.ddpm.TimeEmbedding
+      params:
+        dims: 192 # base_dims
+
+    text_conditioner_config:
+      target: modules.clip.TextConditioner
+      params:
+        dims: 512
+        out_dims: 640
+        num_heads: 8
+        clip_model: ViT-B/32
+        
+    beta_schedule: linear
+    num_timesteps: 1000

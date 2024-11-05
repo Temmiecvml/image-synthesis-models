@@ -10,13 +10,13 @@ class VAutoEncoder(pl.LightningModule):
         self,
         encoder_config,
         decoder_config,
-        learning_rate: float = 1e-3,
+        lr: float = 1e-3,
     ):
         super().__init__()
         self.save_hyperparameters()
         self.encoder = instantiate_object(encoder_config)
         self.decoder = instantiate_object(decoder_config)
-        self.learning_rate = learning_rate
+        self.lr = lr
 
     def forward(self, x):
         z, mean, log_var = self.encoder(x)

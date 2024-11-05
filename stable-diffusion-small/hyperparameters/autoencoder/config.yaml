@@ -3,10 +3,10 @@ inference:
   latent_dim: 4
   latent_width: 64
 
-autoencoder:
+model:
   target: models.autoencoder.VAutoEncoder
   params:
-    learning_rate: 0.5
+    lr: 0.5
     encoder_config:
       target: modules.autoencoder.encoder.VEncoder
       params:
@@ -20,32 +20,16 @@ autoencoder:
         num_groups: 32
         z_scale_factor: 0.18215
 
-ddpm:
-  target: models.ddpm.DDPM
+data:
+  target: modules.data.autoencoder.AutoEncoderDataModule
   params:
-    unet_config:
-      target: modules.diffusion.ddpm.UNet
-      params:
-        base_dims: 192
-        base_context_dims: 640
-        time_embedding_dims: 768
-        num_heads: 6
-        in_dims: 4
-        out_dims: 4
-        groups: 32
-
-    timestep_config:
-      target: modules.diffusion.ddpm.TimeEmbedding
-      params:
-        dims: 192 # base_dims
-
-    text_conditioner_config:
-      target: modules.clip.TextConditioner
-      params:
-        dims: 512
-        out_dims: 640
-        num_heads: 8
-        clip_model: ViT-B/32
-        
-    beta_schedule: linear
-    num_timesteps: 1000
+    data_path: "Ryan-sjtu/celebahq-caption" 
+    seed: 52    
+    batch_size: 64                    
+    image_size: 512                   
+    num_workers: 1                   
+    buffer_size: 512                
+    val_split_ratio: 0.1               
+    test_split_ratio: 0.1             
+    preprocess_batch_fn: "preprocess_celebahq_caption"  
+    

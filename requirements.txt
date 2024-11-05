@@ -2,6 +2,7 @@ numpy==2.1.1
 omegaconf==2.3.0
 torch==2.4.1
 lightning==2.4.0
+lightning[extra]==2.4.0
 torchvision==0.19.1
 requests==2.32.3
 pillow==10.4.0
@@ -10,3 +11,4 @@ transformers==4.45.2
 kornia==0.7.3
 regex==2024.9.11
 ftfy==6.3.0
+datasets==3.1.0

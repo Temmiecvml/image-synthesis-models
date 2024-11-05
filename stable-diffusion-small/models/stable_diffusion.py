@@ -6,9 +6,14 @@ import torch
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from utils import (extract_into_tensor, load_images_to_tensor,
-                   load_trained_model, logger, make_beta_schedule,
-                   tensor_to_pil_images)
+from utils import (
+    extract_into_tensor,
+    load_images_to_tensor,
+    load_trained_model,
+    logger,
+    make_beta_schedule,
+    tensor_to_pil_images,
+)
 
 
 def process_prompt(prompt: str, cfg_scale: float):
@@ -188,9 +193,7 @@ class DDPMSampler:
         sqrt_one_minus_alphas_cumprod = self.sqrt_one_minus_alphas_cumprod.to(
             device=latents.device
         )
-        noise = torch.randn_like(
-            latents, generator=self.generator
-        )
+        noise = torch.randn_like(latents, generator=self.generator)
 
         sqrt_alphas_cum_prod_t = extract_into_tensor(
             sqrt_alphas_cumprod, t, latents.shape
@@ -261,9 +264,7 @@ class DDPMSampler:
 
         # Add noise for stochasticity, except at the final step
         noise = (
-            torch.randn_like(predicted_noise, generator=self.generator)
-            if t > 0
-            else 0
+            torch.randn_like(predicted_noise, generator=self.generator) if t > 0 else 0
         )
 
         sigma_t = torch.sqrt(var_t)

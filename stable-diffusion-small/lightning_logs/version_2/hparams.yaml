@@ -1,0 +1,13 @@
+encoder_config:
+  target: modules.autoencoder.encoder.VEncoder
+  params:
+    base_channels: 192
+    num_groups: 32
+    z_scale_factor: 0.18215
+decoder_config:
+  target: modules.autoencoder.decoder.VDecoder
+  params:
+    base_channels: 192
+    num_groups: 32
+    z_scale_factor: 0.18215
+lr: 0.5
