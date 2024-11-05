@@ -152,7 +152,7 @@ class DDPMSampler:
         schedule: str = "linear",
         num_timesteps: int = 1000,
     ):
-
+        self.generator = generator
         self.create_schedule(schedule, num_timesteps)
         self.set_inference_steps(n_inference_steps, num_timesteps)
 
@@ -163,7 +163,7 @@ class DDPMSampler:
             linear_start=1e-4,
             linear_end=2e-2,
         )
-        self.alphas = torch.tensort(1.0 - self.betas)
+        self.alphas = torch.tensor(1.0 - self.betas)
         self.alphas_cumprod = torch.cumprod(self.alphas, axis=0)
         self.alphas_cumprod_prev = torch.cat(
             [torch.tensor(1.0), self.alphas_cumprod[:-1]]
@@ -180,7 +180,7 @@ class DDPMSampler:
 
     def set_strength(self, strength):
         self.strength = strength
-        self.start_step = int(self.n_inference_steps(1 - strength))
+        self.start_step = int(self.n_inference_steps * (1 - strength))
         self.timesteps = self.timesteps[self.start_step :]
 
     def add_noise(self, latents, t):
@@ -189,7 +189,7 @@ class DDPMSampler:
             device=latents.device
         )
         noise = torch.randn_like(
-            latents, generator=self.generator, device=latents.device
+            latents, generator=self.generator
         )
 
         sqrt_alphas_cum_prod_t = extract_into_tensor(
@@ -207,21 +207,17 @@ class DDPMSampler:
 
     def step(self, t, x_t, predicted_noise, variant="scaled_beta"):
         """
-
         Sample previous step latent of diffusion model.
-
         Paper: https://arxiv.org/pdf/2006.11239
         Denoising Diffusion Probabilistic Models
 
-
         Args:
-            t (_type_): _description_
-            x_t (_type_): _description_
-            predicted_noise (_type_): _description_
-            variant (str, optional): _description_. Defaults to "scaled_beta".
-
+            t (int): current timestep
+            x_t (Tensor): current noisy latent
+            predicted_noise (Tensor): model's noise prediction
+            variant (str, optional): use scaled_beta or standard variant.
         Returns:
-            _type_: _description_
+            x_t_minus_1 (Tensor): latent at previous timestep t-1
         """
         to_device = partial(torch.tensor, device=x_t.device)
         alphas_t = to_device(extract_into_tensor(self.alphas, t, x_t.shape))
@@ -233,10 +229,12 @@ class DDPMSampler:
             extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape)
         )
 
+        # Mean for the reverse process (Equation 11 in the DDPM paper)
         mu_t = (
             x_t - (betas_t * predicted_noise) / sqrt_one_minus_alphas_cumprod_t
         ) / sqrt_alphas_cumprod_t
 
+        # Variance of the reverse process
         var_t = torch.clamp(betas_t, min=1e-20)
 
         if variant == "scaled_beta":
@@ -247,12 +245,12 @@ class DDPMSampler:
                 extract_into_tensor(self.alphas_cumprod, t, x_t.shape)
             )
 
-            # formula 15 from the paper
+            # Alternative mean calculation (Equation 7 in the DDPM paper)
             x_o = (
                 x_t - sqrt_one_minus_alphas_cumprod_t * predicted_noise
             ) / sqrt_alphas_cumprod_t
 
-            # using equation 7 from the paper
+            # Equation for mean under scaled_beta variant
             mu_t = (
                 x_o * torch.sqrt(alphas_cumprod_prev_t) * betas_t
                 + x_t * torch.sqrt(alphas_t) * (1 - alphas_cumprod_prev_t)
@@ -261,12 +259,12 @@ class DDPMSampler:
             var_t = betas_t * (1.0 - alphas_cumprod_prev_t) / (1.0 - alphas_cumprod_t)
             var_t = torch.clamp(var_t, min=1e-20)
 
-        if t > 0:
-            noise = torch.randn_like(
-                predicted_noise, device=x_t.device, generator=self.generator
-            )
-        else:
-            noise = predicted_noise = 0
+        # Add noise for stochasticity, except at the final step
+        noise = (
+            torch.randn_like(predicted_noise, generator=self.generator)
+            if t > 0
+            else 0
+        )
 
         sigma_t = torch.sqrt(var_t)
         x_t_minus_1 = mu_t + sigma_t * noise
