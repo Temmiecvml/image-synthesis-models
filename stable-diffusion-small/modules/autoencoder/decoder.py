@@ -31,9 +31,9 @@ class Up(nn.Module):
         super(Up, self).__init__()
 
         self.upsample = nn.Sequential(
-            # f=8
+            # f=8 , we divide by 2 again because the latents were divided by 2
             nn.Conv2d(
-                base_channels // 32, base_channels // 32, kernel_size=1, padding=0
+                base_channels // (32 * 2) , base_channels // 32, kernel_size=1, padding=0
             ),
             nn.Conv2d(base_channels // 32, base_channels * 4, kernel_size=3, padding=1),
             VResidualBlock(base_channels * 4, base_channels * 4),

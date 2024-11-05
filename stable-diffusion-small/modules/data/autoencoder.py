@@ -27,15 +27,14 @@ def preprocess_celebahq_caption(samples, transform):
 
 
 def collate_celebahq_caption(samples):
+    # Stack images directly as tensors
+    images = np.stack([sample["image"] for sample in samples])
+    texts = np.stack([sample["text"] for sample in samples])
 
-    images = np.array([sample["image"] for sample in samples])
-    # no string representation in torch
-    texts = np.array([sample["text"] for sample in samples])
-    images = torch.from_numpy(images / 255).to(torch.float32)
-    # normalize
-    images = (images - 0.5) / 0.5
-    # put batch dimension to position 1
-    images = images.permute(0, 3, 1, 2)
+    # Normalize images and adjust channels
+    images = (images / 255.0).to(torch.float32)  # Normalize to [0, 1]
+    images = (images - 0.5) / 0.5                 # Rescale to [-1, 1]
+    images = images.permute(0, 3, 1, 2)           # Move channels to position 1
 
     return images, texts
 
@@ -118,7 +117,7 @@ class AutoEncoderDataModule(pl.LightningDataModule):
 
     def setup(self, stage: str):
         shuffled_dataset = self.dataset.shuffle(
-            seed=self.seed, buffer_size=self.buffer_size
+            seed=self.seed, buffer_size=self.buffer_size,
         )
 
         total_samples = 1 / (1 - self.val_split_ratio - self.test_split_ratio)

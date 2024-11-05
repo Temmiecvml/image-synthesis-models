@@ -43,27 +43,28 @@ if __name__ == "__main__":
 
     try:
         config = OmegaConf.load(args.config)
-        config.data.seed = args.seed
-        logger.info(f"Loading config at: {args.config}")
-        model = instantiate_object(config.model)
-        data_module = instantiate_object(config.data)
-        logger.info(
-            f"Started training Model {config.model.target} at: {config.data.target}"
-        )
+        # config.data.seed = args.seed
+        # logger.info(f"Loading config at: {args.config}")
+        # model = instantiate_object(config.model)
+        # data_module = instantiate_object(config.data)
+        # logger.info(
+        #     f"Started training Model {config.model.target} at: {config.data.target}"
+        # )
 
-        trainer = pl.Trainer(
-            max_epochs=10,
-            accelerator="mps",
-        )
+        # trainer = pl.Trainer(
+        #     max_epochs=10,
+        #     accelerator="mps",
+        # )
 
-        trainer.fit(model, datamodule=data_module)
+        # trainer.fit(model, datamodule=data_module)
+        # import torch
 
-        # sample_input = torch.ones(2, 3, 64, 64)
+        # sample_input = torch.randn(2, 3, 512, 512)
         # c = ["I am a demo", "I am a cat", ""]
-        # # model = instantiate_object(config.autoencoder)
-        # # recon_x, mean, log_var = model(sample_input)
+        # model = instantiate_object(config.model)
+        # recon_x, mean, log_var = model(sample_input)
 
-        # # print("Model output shape: ", recon_x.shape)
+        # print("Model output shape: ", recon_x.shape)
 
         # diffusion_model = instantiate_object(config.ddpm)
         # o = diffusion_model(sample_input, c)
