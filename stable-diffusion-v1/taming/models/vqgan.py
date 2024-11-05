@@ -2,7 +2,6 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from main import instantiate_from_config
-
 from taming.modules.diffusionmodules.model import Decoder, Encoder
 from taming.modules.vqvae.quantize import EMAVectorQuantizer, GumbelQuantize
 from taming.modules.vqvae.quantize import VectorQuantizer2 as VectorQuantizer

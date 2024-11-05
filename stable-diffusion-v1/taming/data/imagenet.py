@@ -5,15 +5,14 @@ import tarfile
 
 import albumentations
 import numpy as np
+import taming.data.utils as bdu
 import yaml
 from omegaconf import OmegaConf
 from PIL import Image
-from torch.utils.data import Dataset
-from tqdm import tqdm
-
-import taming.data.utils as bdu
 from taming.data.base import ImagePaths
 from taming.util import download, retrieve
+from torch.utils.data import Dataset
+from tqdm import tqdm
 
 
 def give_synsets_from_indices(indices, path_to_yaml="data/imagenet_idx_to_synset.yaml"):

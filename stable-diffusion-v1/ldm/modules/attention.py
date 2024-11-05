@@ -4,9 +4,8 @@ from inspect import isfunction
 import torch
 import torch.nn.functional as F
 from einops import rearrange, repeat
-from torch import einsum, nn
-
 from ldm.modules.diffusionmodules.util import checkpoint
+from torch import einsum, nn
 
 
 def exists(val):

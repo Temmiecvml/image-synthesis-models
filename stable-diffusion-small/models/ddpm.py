@@ -5,12 +5,8 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 
-from utils import (
-    extract_into_tensor,
-    instantiate_object,
-    make_beta_schedule,
-    timestep_embedding,
-)
+from utils import (extract_into_tensor, instantiate_object, make_beta_schedule,
+                   timestep_embedding)
 
 
 class DDPM(pl.LightningModule):

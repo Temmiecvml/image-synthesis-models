@@ -5,23 +5,14 @@ from more_itertools.recipes import grouper
 from PIL import Image as pil_image
 from PIL import ImageDraw as pil_img_draw
 from PIL import ImageFont
-from torch import LongTensor, Tensor
-
-from taming.data.conditional_builder.objects_center_points import (
-    ObjectsCenterPointsConditionalBuilder,
-)
+from taming.data.conditional_builder.objects_center_points import \
+    ObjectsCenterPointsConditionalBuilder
 from taming.data.conditional_builder.utils import (
-    BLACK,
-    COLOR_PALETTE,
-    GRAY_75,
-    WHITE,
-    absolute_bbox,
-    additional_parameters_string,
-    get_plot_font_size,
-    pad_list,
-)
+    BLACK, COLOR_PALETTE, GRAY_75, WHITE, absolute_bbox,
+    additional_parameters_string, get_plot_font_size, pad_list)
 from taming.data.helper_types import Annotation, BoundingBox
 from taming.data.image_transforms import convert_pil_to_tensor
+from torch import LongTensor, Tensor
 
 
 class ObjectsBoundingBoxConditionalBuilder(ObjectsCenterPointsConditionalBuilder):

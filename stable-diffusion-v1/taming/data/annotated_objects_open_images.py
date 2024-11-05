@@ -5,10 +5,9 @@ from csv import reader as TupleReader
 from pathlib import Path
 from typing import Any, Dict, List
 
-from tqdm import tqdm
-
 from taming.data.annotated_objects_dataset import AnnotatedObjectsDataset
 from taming.data.helper_types import Annotation, Category
+from tqdm import tqdm
 
 OPEN_IMAGES_STRUCTURE = {
     "train": {

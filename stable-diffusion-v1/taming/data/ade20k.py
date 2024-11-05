@@ -4,9 +4,9 @@ import albumentations
 import cv2
 import numpy as np
 from PIL import Image
+from taming.data.sflckr import \
+    SegmentationBase  # for examples included in repo
 from torch.utils.data import Dataset
-
-from taming.data.sflckr import SegmentationBase  # for examples included in repo
 
 
 class Examples(SegmentationBase):

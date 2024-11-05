@@ -4,10 +4,9 @@ from itertools import chain
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List
 
-from tqdm import tqdm
-
 from taming.data.annotated_objects_dataset import AnnotatedObjectsDataset
 from taming.data.helper_types import Annotation, Category, ImageDescription
+from tqdm import tqdm
 
 COCO_PATH_STRUCTURE = {
     "train": {

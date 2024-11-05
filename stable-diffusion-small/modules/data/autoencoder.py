@@ -1,17 +1,43 @@
 import sys
+from functools import partial
 
+import numpy as np
 import pytorch_lightning as pl
+import torch
 from datasets import load_dataset
-from PIL import Image
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 from torchvision import transforms
 
 
-def preprocess_celebahq_caption(samples):
+def preprocess_celebahq_caption(samples, transform):
     prefix = "a photography of"
-    samples["text"] = [i.strip(prefix).strip("").lower() for i in samples["text"]]
-
+    process_text = lambda x: x.lower().removeprefix(prefix).strip()
+    process_image = lambda x: transform(x)
+    samples["text"] = (
+        [process_text(text) for text in samples["text"]]
+        if type(samples["text"]) is list
+        else process_text(samples["text"])
+    )
+    samples["image"] = (
+        [process_image(image) for image in samples["image"]]
+        if type(samples["image"]) is list
+        else process_image(samples["image"])
+    )
     return samples
+
+
+def collate_celebahq_caption(samples):
+
+    images = np.array([sample["image"] for sample in samples])
+    # no string representation in torch
+    texts = np.array([sample["text"] for sample in samples])
+    images = torch.from_numpy(images / 255).to(torch.float32)
+    # normalize
+    images = (images - 0.5) / 0.5
+    # put batch dimension to position 1
+    images = images.permute(0, 3, 1, 2)
+
+    return images, texts
 
 
 class CustomResizeAndCrop:
@@ -44,6 +70,7 @@ class AutoEncoderDataModule(pl.LightningDataModule):
         image_size: int,
         num_workers: int,
         preprocess_batch_fn: str,
+        collate_fn: str,
         val_split_ratio: float = 0.1,
         test_split_ratio: float = 0.1,
         cache_dir: str = None,
@@ -58,19 +85,24 @@ class AutoEncoderDataModule(pl.LightningDataModule):
         self.val_split_ratio = val_split_ratio
         self.test_split_ratio = test_split_ratio
         self.cache_dir = cache_dir
+        # https://pytorch.org/docs/stable/data.html
+        # https://github.com/pytorch/pytorch/issues/13246
 
         self.transform = transforms.Compose(
             [
                 CustomResizeAndCrop(target_size=image_size),
                 transforms.RandomHorizontalFlip(p=0.5),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.5], std=[0.5]),
+                # transforms.ToTensor(), # we convert to tensor in collation function
+                # transforms.Normalize(mean=[0.5], std=[0.5]),
             ]
         )
 
-        self.preprocess_batch = getattr(
-            sys.modules[__name__], preprocess_batch_fn, None
-        )
+        preprocess_batch = getattr(sys.modules[__name__], preprocess_batch_fn, None)
+
+        self.preprocess_batch = partial(preprocess_batch, transform=self.transform)
+
+        self.collate_fn = getattr(sys.modules[__name__], collate_fn, None)
+
         if not callable(self.preprocess_batch):
             raise ValueError(
                 f"Provided preprocess_batch_fn '{preprocess_batch_fn}' is not a callable function"
@@ -120,6 +152,7 @@ class AutoEncoderDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             persistent_workers=True,
+            collate_fn=self.collate_fn,
         )
 
     def val_dataloader(self):
@@ -128,6 +161,7 @@ class AutoEncoderDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             persistent_workers=True,
+            collate_fn=self.collate_fn,
         )
 
     def test_dataloader(self):
@@ -135,4 +169,5 @@ class AutoEncoderDataModule(pl.LightningDataModule):
             dataset=self.test_ds,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
+            collate_fn=self.collate_fn,
         )

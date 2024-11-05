@@ -5,10 +5,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 from einops import rearrange
-
 from ldm.modules.attention import LinearAttention
+from ldm.modules.distributions.distributions import \
+    DiagonalGaussianDistribution
 from ldm.util import instantiate_from_config
-from ldm.modules.distributions.distributions import DiagonalGaussianDistribution
 
 
 def get_timestep_embedding(timesteps, embedding_dim):

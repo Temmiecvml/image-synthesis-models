@@ -4,9 +4,8 @@ import os
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-from taming.util import instantiate_from_config
-
 from taming.modules.util import SOSProvider
+from taming.util import instantiate_from_config
 
 
 def disabled_train(self, mode=True):

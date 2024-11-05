@@ -29,7 +29,8 @@ data:
     image_size: 512                   
     num_workers: 1                   
     buffer_size: 512                
-    val_split_ratio: 0.1               
-    test_split_ratio: 0.1             
-    preprocess_batch_fn: "preprocess_celebahq_caption"  
+    val_split_ratio: 0.05               
+    test_split_ratio: 0.05             
+    preprocess_batch_fn: "preprocess_celebahq_caption"
+    collate_fn: "collate_celebahq_caption"  
     

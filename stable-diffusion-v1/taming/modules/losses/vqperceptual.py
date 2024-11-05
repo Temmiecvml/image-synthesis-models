@@ -3,8 +3,8 @@ import ssl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-from taming.modules.discriminator.model import NLayerDiscriminator, weights_init
+from taming.modules.discriminator.model import (NLayerDiscriminator,
+                                                weights_init)
 from taming.modules.losses.lpips import LPIPS
 
 ssl._create_default_https_context = ssl._create_unverified_context

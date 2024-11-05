@@ -2,7 +2,7 @@
 
 import torch
 
-from .dpm_solver import NoiseScheduleVP, model_wrapper, DPM_Solver
+from .dpm_solver import DPM_Solver, NoiseScheduleVP, model_wrapper
 
 
 class DPMSolverSampler(object):

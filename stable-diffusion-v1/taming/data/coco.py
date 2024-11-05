@@ -4,10 +4,10 @@ import os
 import albumentations
 import numpy as np
 from PIL import Image
+from taming.data.sflckr import \
+    SegmentationBase  # for examples included in repo
 from torch.utils.data import Dataset
 from tqdm import tqdm
-
-from taming.data.sflckr import SegmentationBase  # for examples included in repo
 
 
 class Examples(SegmentationBase):

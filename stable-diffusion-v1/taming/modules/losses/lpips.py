@@ -4,9 +4,8 @@ from collections import namedtuple
 
 import torch
 import torch.nn as nn
-from torchvision import models
-
 from taming.util import get_ckpt_path
+from torchvision import models
 
 
 class LPIPS(nn.Module):

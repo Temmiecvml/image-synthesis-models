@@ -1,15 +1,12 @@
+from functools import partial
+
+import clip
+import kornia
 import torch
 import torch.nn as nn
-from functools import partial
-import clip
 from einops import rearrange, repeat
-import kornia
-
-
-from ldm.modules.x_transformer import (
-    Encoder,
-    TransformerWrapper,
-)  # TODO: can we directly rely on lucidrains code and simply add this as a reuirement? --> test
+from ldm.modules.x_transformer import (  # TODO: can we directly rely on lucidrains code and simply add this as a reuirement? --> test
+    Encoder, TransformerWrapper)
 
 
 class AbstractEncoder(nn.Module):
@@ -61,7 +58,8 @@ class BERTTokenizer(AbstractEncoder):
 
     def __init__(self, device="cpu", vq_interface=True, max_length=77):
         super().__init__()
-        from transformers import BertTokenizerFast  # TODO: add to reuquirements
+        from transformers import \
+            BertTokenizerFast  # TODO: add to reuquirements
 
         self.tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
         self.device = device

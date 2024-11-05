@@ -7,17 +7,10 @@ import numpy as np
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
-
 from ldm.modules.attention import SpatialTransformer
-from ldm.modules.diffusionmodules.util import (
-    avg_pool_nd,
-    checkpoint,
-    conv_nd,
-    linear,
-    normalization,
-    timestep_embedding,
-    zero_module,
-)
+from ldm.modules.diffusionmodules.util import (avg_pool_nd, checkpoint,
+                                               conv_nd, linear, normalization,
+                                               timestep_embedding, zero_module)
 
 
 # dummy replace
