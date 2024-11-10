@@ -24,7 +24,8 @@ def train_model(config_path, ckpt: str):
 
     trainer = pl.Trainer(
         max_epochs=10,
-        accelerator="mps",
+        accelerator="gpu",
+        strategy=FSDPStrategy()
     )
 
     trainer.fit(model, datamodule=data_module)
