@@ -99,6 +99,7 @@ class AutoEncoderDataModule(pl.LightningDataModule):
         ).take(self.val_data_size)
 
     def setup(self, stage: str):
+        self.prepare_data() # should be removed
         if stage == "fit":
             train_shuffled_dataset = self.train_dataset.shuffle(
                 seed=self.seed,
