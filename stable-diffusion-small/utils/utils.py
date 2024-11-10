@@ -105,3 +105,11 @@ def tensor_to_pil_images(tensor_batch):
         pil_images.append(pil_image)
 
     return pil_images
+
+
+def save_checkpoint():
+    pass
+
+
+def load_checkpoint():
+    pass

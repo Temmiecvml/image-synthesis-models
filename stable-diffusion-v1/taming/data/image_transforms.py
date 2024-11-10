@@ -5,8 +5,12 @@ from typing import Union
 import torch
 from taming.data.helper_types import BoundingBox, Image
 from torch import Tensor
-from torchvision.transforms import (CenterCrop, PILToTensor, RandomCrop,
-                                    RandomHorizontalFlip)
+from torchvision.transforms import (
+    CenterCrop,
+    PILToTensor,
+    RandomCrop,
+    RandomHorizontalFlip,
+)
 from torchvision.transforms import functional as F
 from torchvision.transforms.functional import _get_image_size as get_image_size
 

@@ -3,18 +3,27 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import PIL.Image as pil_image
-from taming.data.conditional_builder.objects_bbox import \
-    ObjectsBoundingBoxConditionalBuilder
-from taming.data.conditional_builder.objects_center_points import \
-    ObjectsCenterPointsConditionalBuilder
+from taming.data.conditional_builder.objects_bbox import (
+    ObjectsBoundingBoxConditionalBuilder,
+)
+from taming.data.conditional_builder.objects_center_points import (
+    ObjectsCenterPointsConditionalBuilder,
+)
 from taming.data.conditional_builder.utils import load_object_from_string
-from taming.data.helper_types import (Annotation, BoundingBox, CropMethodType,
-                                      Image, SplitType)
-from taming.data.image_transforms import (CenterCropReturnCoordinates,
-                                          Random2dCropReturnCoordinates,
-                                          RandomCrop1dReturnCoordinates,
-                                          RandomHorizontalFlipReturn,
-                                          convert_pil_to_tensor)
+from taming.data.helper_types import (
+    Annotation,
+    BoundingBox,
+    CropMethodType,
+    Image,
+    SplitType,
+)
+from taming.data.image_transforms import (
+    CenterCropReturnCoordinates,
+    Random2dCropReturnCoordinates,
+    RandomCrop1dReturnCoordinates,
+    RandomHorizontalFlipReturn,
+    convert_pil_to_tensor,
+)
 from torch import Tensor
 from torch.utils.data import Dataset
 from torchvision import transforms

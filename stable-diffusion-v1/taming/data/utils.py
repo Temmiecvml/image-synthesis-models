@@ -9,8 +9,10 @@ import numpy as np
 import torch
 from taming.data.helper_types import Annotation
 from torch._six import string_classes
-from torch.utils.data._utils.collate import (default_collate_err_msg_format,
-                                             np_str_obj_array_pattern)
+from torch.utils.data._utils.collate import (
+    default_collate_err_msg_format,
+    np_str_obj_array_pattern,
+)
 from tqdm import tqdm
 
 

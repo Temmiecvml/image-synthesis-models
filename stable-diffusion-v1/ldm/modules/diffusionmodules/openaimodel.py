@@ -8,9 +8,15 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 from ldm.modules.attention import SpatialTransformer
-from ldm.modules.diffusionmodules.util import (avg_pool_nd, checkpoint,
-                                               conv_nd, linear, normalization,
-                                               timestep_embedding, zero_module)
+from ldm.modules.diffusionmodules.util import (
+    avg_pool_nd,
+    checkpoint,
+    conv_nd,
+    linear,
+    normalization,
+    timestep_embedding,
+    zero_module,
+)
 
 
 # dummy replace
@@ -324,7 +330,7 @@ class AttentionBlock(nn.Module):
         # return pt_checkpoint(self._forward, x)  # pytorch
 
     def _forward(self, x):
-        b, c, *spatial = x.shape # b, c, h, w
+        b, c, *spatial = x.shape  # b, c, h, w
         x = x.reshape(b, c, -1)
         qkv = self.qkv(self.norm(x))
         h = self.attention(qkv)
@@ -505,7 +511,9 @@ class UNetModel(nn.Module):
 
         self.image_size = image_size
         self.in_channels = in_channels
-        self.model_channels = model_channels #base channel count for the model, default: 192
+        self.model_channels = (
+            model_channels  # base channel count for the model, default: 192
+        )
         self.out_channels = out_channels
         self.num_res_blocks = num_res_blocks
         self.attention_resolutions = attention_resolutions
@@ -522,9 +530,9 @@ class UNetModel(nn.Module):
 
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
-            linear(model_channels, time_embed_dim), # 192 -> 768
+            linear(model_channels, time_embed_dim),  # 192 -> 768
             nn.SiLU(),
-            linear(time_embed_dim, time_embed_dim), # 768 -> 768
+            linear(time_embed_dim, time_embed_dim),  # 768 -> 768
         )
 
         if self.num_classes is not None:
@@ -539,28 +547,28 @@ class UNetModel(nn.Module):
         )
         self._feature_size = model_channels
         input_block_chans = [model_channels]
-        ch = model_channels # default: 192
+        ch = model_channels  # default: 192
         ds = 1
         for level, mult in enumerate(channel_mult):
-            for _ in range(num_res_blocks): # default: 2
+            for _ in range(num_res_blocks):  # default: 2
                 layers = [
                     ResBlock(
-                        ch, # starting: 192
-                        time_embed_dim, # 768
+                        ch,  # starting: 192
+                        time_embed_dim,  # 768
                         dropout,
-                        out_channels=mult * model_channels, # mult: 1, 2,3, 5
+                        out_channels=mult * model_channels,  # mult: 1, 2,3, 5
                         dims=dims,
                         use_checkpoint=use_checkpoint,
                         use_scale_shift_norm=use_scale_shift_norm,
                     )
                 ]
                 ch = mult * model_channels
-                if ds in attention_resolutions: # default: [ 8, 4, 2]
+                if ds in attention_resolutions:  # default: [ 8, 4, 2]
                     if num_head_channels == -1:
                         dim_head = ch // num_heads
                     else:
-                        num_heads = ch // num_head_channels # 192 // 32 = 6
-                        dim_head = num_head_channels # 32
+                        num_heads = ch // num_head_channels  # 192 // 32 = 6
+                        dim_head = num_head_channels  # 32
                     if legacy:
                         # num_heads = 1
                         dim_head = (
@@ -766,7 +774,7 @@ class UNetModel(nn.Module):
         ), "must specify y if and only if the model is class-conditional"
         hs = []
         t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
-        emb = self.time_embed(t_emb) # (N, 768)
+        emb = self.time_embed(t_emb)  # (N, 768)
 
         if self.num_classes is not None:
             assert y.shape == (x.shape[0],)

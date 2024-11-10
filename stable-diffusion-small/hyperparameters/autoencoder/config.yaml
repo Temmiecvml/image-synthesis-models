@@ -7,17 +7,18 @@ model:
   target: models.autoencoder.VAutoEncoder
   params:
     lr: 0.5
+    beta_scale: 0.75
     encoder_config:
       target: modules.autoencoder.encoder.VEncoder
       params:
-        base_channels: 192
-        num_groups: 32
+        base_channels: 64 # 192
+        num_groups: 2 # 32
         z_scale_factor: 0.18215
     decoder_config:
       target: modules.autoencoder.decoder.VDecoder
       params:
-        base_channels: 192
-        num_groups: 32
+        base_channels: 64 # 192
+        num_groups: 2 # 32
         z_scale_factor: 0.18215
 
 data:
@@ -25,12 +26,11 @@ data:
   params:
     data_path: "Ryan-sjtu/celebahq-caption" 
     seed: 52    
-    batch_size: 64                    
+    batch_size: 8                  
     image_size: 512                   
     num_workers: 1                   
     buffer_size: 512                
-    val_split_ratio: 0.05               
-    test_split_ratio: 0.05             
+    val_data_size: 2000                          
     preprocess_batch_fn: "preprocess_celebahq_caption"
     collate_fn: "collate_celebahq_caption"  
     

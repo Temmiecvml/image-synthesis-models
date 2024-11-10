@@ -5,10 +5,14 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 from tqdm import tqdm
-
-from utils import (extract_into_tensor, load_images_to_tensor,
-                   load_trained_model, logger, make_beta_schedule,
-                   tensor_to_pil_images)
+from utils import (
+    extract_into_tensor,
+    load_images_to_tensor,
+    load_trained_model,
+    logger,
+    make_beta_schedule,
+    tensor_to_pil_images,
+)
 
 
 def process_prompt(prompt: str, cfg_scale: float):
@@ -128,7 +132,7 @@ def generate(
                 latents = latents.repeat(2, 1, 1, 1)
 
             logger.info(f"Generating image at timestep: {timestep}")
-            output = ddpm_model.apply_model(latents, prompt, timestep)
+            output = ddpm_model.predict_noise(latents, prompt, timestep)
 
             if cfg_scale > 0:
                 cond_output, uncond_output = torch.chunk(output, 2, dim=0)

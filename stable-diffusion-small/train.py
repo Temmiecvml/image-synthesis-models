@@ -4,25 +4,61 @@ import datetime
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
+from utils import instantiate_object, load_checkpoint, logger
 
-from utils import instantiate_object, logger
+
+def train_model(config_path, ckpt: str):
+    config = OmegaConf.load(config_path)
+    config.data.seed = args.seed
+
+    if ckpt:
+        logger.info(f"Loading Model at: {ckpt}")
+        model = load_checkpoint(ckpt)
+
+    else:
+        logger.info(f"Instatialing Model with config at: {config}")
+        model = instantiate_object(config.model)
+
+    data_module = instantiate_object(config.data)
+
+    trainer = pl.Trainer(
+        max_epochs=10,
+        accelerator="mps",
+    )
+
+    trainer.fit(model, datamodule=data_module)
+
+    logger.info(
+        f"Started training Model {config.model.target} with data: {config.data.target}"
+    )
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Stable Diffusion Training Parameters")
 
     parser.add_argument(
-        "--config",
+        "--autoencoder_config",
         type=str,
-        required=True,
-        default="hyperparameters/autoencoder/config.yaml",
+        default="",
         help="Path to the YAML configuration file.",
     )
 
-    parser.add_argument("--cpkt", type=str, required=True, help="checkpoint path")
+    parser.add_argument(
+        "--ldm_config",
+        type=str,
+        default="",
+        help="Path to the YAML configuration file.",
+    )
 
     parser.add_argument(
-        "--resume", action="store_true", help="Resume from a previous run if specified."
+        "--autoencoder_cpkt", type=str, default="", help="autoencoder checkpoint path"
+    )
+
+    parser.add_argument(
+        "--ldm_cpkt",
+        type=str,
+        default="",
+        help="latent diffusion model checkpoint path",
     )
 
     parser.add_argument(
@@ -42,21 +78,12 @@ if __name__ == "__main__":
     seed_everything(args.seed)
 
     try:
-        config = OmegaConf.load(args.config)
-        # config.data.seed = args.seed
-        # logger.info(f"Loading config at: {args.config}")
-        # model = instantiate_object(config.model)
-        # data_module = instantiate_object(config.data)
-        # logger.info(
-        #     f"Started training Model {config.model.target} at: {config.data.target}"
-        # )
+        if args.autoencoder_config:
+            train_model(args.autoencoder_config, args.autoencoder_cpkt)
 
-        # trainer = pl.Trainer(
-        #     max_epochs=10,
-        #     accelerator="mps",
-        # )
+        if args.ldm_config:
+            train_model(args.ldm_config, args.ldm_cpkt)
 
-        # trainer.fit(model, datamodule=data_module)
         # import torch
 
         # sample_input = torch.randn(2, 3, 512, 512)

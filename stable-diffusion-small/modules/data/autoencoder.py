@@ -11,30 +11,15 @@ from torchvision import transforms
 
 def preprocess_celebahq_caption(samples, transform):
     prefix = "a photography of"
-    process_text = lambda x: x.lower().removeprefix(prefix).strip()
-    process_image = lambda x: transform(x)
-    samples["text"] = (
-        [process_text(text) for text in samples["text"]]
-        if type(samples["text"]) is list
-        else process_text(samples["text"])
-    )
-    samples["image"] = (
-        [process_image(image) for image in samples["image"]]
-        if type(samples["image"]) is list
-        else process_image(samples["image"])
-    )
+    samples["text"] = [i.lower().removeprefix(prefix).strip() for i in samples["text"]]
+    samples["image"] = [transform(i) for i in samples["image"]]
+
     return samples
 
 
 def collate_celebahq_caption(samples):
-    # Stack images directly as tensors
-    images = np.stack([sample["image"] for sample in samples])
+    images = torch.stack([sample["image"] for sample in samples])
     texts = np.stack([sample["text"] for sample in samples])
-
-    # Normalize images and adjust channels
-    images = (images / 255.0).to(torch.float32)  # Normalize to [0, 1]
-    images = (images - 0.5) / 0.5                 # Rescale to [-1, 1]
-    images = images.permute(0, 3, 1, 2)           # Move channels to position 1
 
     return images, texts
 
@@ -70,8 +55,7 @@ class AutoEncoderDataModule(pl.LightningDataModule):
         num_workers: int,
         preprocess_batch_fn: str,
         collate_fn: str,
-        val_split_ratio: float = 0.1,
-        test_split_ratio: float = 0.1,
+        val_data_size: int,
         cache_dir: str = None,
     ):
         super().__init__()
@@ -81,8 +65,7 @@ class AutoEncoderDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_workers = num_workers
-        self.val_split_ratio = val_split_ratio
-        self.test_split_ratio = test_split_ratio
+        self.val_data_size = val_data_size
         self.cache_dir = cache_dir
         # https://pytorch.org/docs/stable/data.html
         # https://github.com/pytorch/pytorch/issues/13246
@@ -91,57 +74,47 @@ class AutoEncoderDataModule(pl.LightningDataModule):
             [
                 CustomResizeAndCrop(target_size=image_size),
                 transforms.RandomHorizontalFlip(p=0.5),
-                # transforms.ToTensor(), # we convert to tensor in collation function
-                # transforms.Normalize(mean=[0.5], std=[0.5]),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.5], std=[0.5]),
             ]
         )
 
         preprocess_batch = getattr(sys.modules[__name__], preprocess_batch_fn, None)
-
         self.preprocess_batch = partial(preprocess_batch, transform=self.transform)
-
         self.collate_fn = getattr(sys.modules[__name__], collate_fn, None)
 
-        if not callable(self.preprocess_batch):
-            raise ValueError(
-                f"Provided preprocess_batch_fn '{preprocess_batch_fn}' is not a callable function"
-            )
-
     def prepare_data(self):
-        self.dataset = load_dataset(
+        self.train_dataset = load_dataset(
             self.data_path,
             split="train",
             streaming=True,
             cache_dir=self.cache_dir,
-        )
+        ).skip(self.val_data_size)
+
+        self.val_dataset = load_dataset(
+            self.data_path,
+            split="train",
+            streaming=True,
+            cache_dir=self.cache_dir,
+        ).take(self.val_data_size)
 
     def setup(self, stage: str):
-        shuffled_dataset = self.dataset.shuffle(
-            seed=self.seed, buffer_size=self.buffer_size,
-        )
+        if stage == "fit":
+            train_shuffled_dataset = self.train_dataset.shuffle(
+                seed=self.seed,
+                buffer_size=self.buffer_size,
+            )
 
-        total_samples = 1 / (1 - self.val_split_ratio - self.test_split_ratio)
+            val_shuffled_dataset = self.val_dataset.shuffle(
+                seed=self.seed,
+                buffer_size=self.buffer_size,
+            )
 
-        # Create iterators for train, val, and test splits
-        self.train_ds = shuffled_dataset.take(
-            int((1 - self.val_split_ratio - self.test_split_ratio) * total_samples)
-        )
-        self.val_ds = shuffled_dataset.skip(
-            int((1 - self.val_split_ratio - self.test_split_ratio) * total_samples)
-        ).take(int(self.val_split_ratio * total_samples))
-        self.test_ds = shuffled_dataset.skip(
-            int((1 - self.test_split_ratio) * total_samples)
-        )
-
-        # Apply batch preprocessing
-        if self.preprocess_batch:
-            self.train_ds = self.train_ds.map(
+            self.train_ds = train_shuffled_dataset.map(
                 self.preprocess_batch, batch_size=self.batch_size, batched=True
             )
-            self.val_ds = self.val_ds.map(
-                self.preprocess_batch, batch_size=self.batch_size, batched=True
-            )
-            self.test_ds = self.test_ds.map(
+
+            self.val_ds = val_shuffled_dataset.map(
                 self.preprocess_batch, batch_size=self.batch_size, batched=True
             )
 
@@ -160,13 +133,5 @@ class AutoEncoderDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             persistent_workers=True,
-            collate_fn=self.collate_fn,
-        )
-
-    def test_dataloader(self):
-        return DataLoader(
-            dataset=self.test_ds,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
             collate_fn=self.collate_fn,
         )

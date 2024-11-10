@@ -1,8 +1,8 @@
-ddpm:
-  target: models.ddpm.DDPM
+ldm:
+  target: models.ldm.LDM
   params:
     unet_config:
-      target: modules.diffusion.ddpm.UNet
+      target: modules.diffusion.ldm.UNet
       params:
         base_dims: 192
         base_context_dims: 640
@@ -11,9 +11,13 @@ ddpm:
         in_dims: 4
         out_dims: 4
         groups: 32
+        loss_type: l2
+        v_posterior: 0.05
+        l_simple_weight: 0.9
+        elbo_weight: 0.1
 
     timestep_config:
-      target: modules.diffusion.ddpm.TimeEmbedding
+      target: modules.diffusion.ldm.TimeEmbedding
       params:
         dims: 192 # base_dims
 

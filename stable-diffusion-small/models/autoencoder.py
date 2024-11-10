@@ -1,22 +1,19 @@
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-
 from utils import instantiate_object
 
 
 class VAutoEncoder(pl.LightningModule):
     def __init__(
-        self,
-        encoder_config,
-        decoder_config,
-        lr: float = 1e-3,
+        self, encoder_config, decoder_config, lr: float = 1e-3, beta_scale: float = 1
     ):
         super().__init__()
         self.save_hyperparameters()
         self.encoder = instantiate_object(encoder_config)
         self.decoder = instantiate_object(decoder_config)
         self.lr = lr
+        self.beta_scale = beta_scale
 
     def forward(self, x):
         z, mean, log_var = self.encoder(x)
@@ -31,7 +28,7 @@ class VAutoEncoder(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, _ = batch
         recon_x, mu, logvar = self(x)
-        loss = self.loss_function(recon_x, x, mu, logvar)
+        loss = self.loss_function(recon_x, x, mu, logvar, self.beta_scale)
         self.log("train_loss", loss)
         return loss
 
@@ -47,10 +44,12 @@ class VAutoEncoder(pl.LightningModule):
         loss = self.loss_function(recon_x, x, mu, logvar)
         self.log("test_loss", loss)
 
-    def loss_function(self, recon_x, x, mu, logvar):
-        BCE = F.binary_cross_entropy(recon_x, x, reduction="sum")
+    def loss_function(self, recon_x, x, mu, logvar, beta=1.0):
+        MSE = F.mse_loss(recon_x, x, reduction="mean")
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        return BCE + KLD
+        # Normalize KL divergence by batch size and apply beta scaling
+        KLD = KLD / x.size(0)
+        return MSE + beta * KLD
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
