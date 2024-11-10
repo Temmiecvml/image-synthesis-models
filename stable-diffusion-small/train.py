@@ -5,6 +5,7 @@ import pytorch_lightning as pl
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
 from utils import instantiate_object, load_checkpoint, logger
+from pytorch_lightning.strategies import FSDPStrategy
 
 
 def train_model(config_path, ckpt: str):
