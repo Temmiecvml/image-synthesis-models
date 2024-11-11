@@ -30,7 +30,7 @@ data:
     image_size: 128                   
     num_workers: 10                   
     buffer_size: 512                
-    val_data_size: 2000                          
+    train_val_split: 0.05                        
     preprocess_batch_fn: "preprocess_celebahq_caption"
     collate_fn: "collate_celebahq_caption"  
     

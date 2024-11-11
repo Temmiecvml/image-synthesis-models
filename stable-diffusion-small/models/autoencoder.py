@@ -1,6 +1,7 @@
 import lightning.pytorch as pl
 import torch
 import torch.nn.functional as F
+
 from utils import instantiate_object
 
 
@@ -25,9 +26,10 @@ class VAutoEncoder(pl.LightningModule):
             x = x.to(rank)
             z, mean, log_var = self.encoder(x)
             z = z.to(rank + 1)
+
             recon_x = self.decoder(z)
 
-        return recon_x, mean, log_var
+            return recon_x, mean, log_var
 
     def decode(self, z):
         recon_x = self.decoder(z)

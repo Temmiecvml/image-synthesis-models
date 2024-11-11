@@ -7,6 +7,7 @@ from lightning.pytorch import seed_everything
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.strategies import FSDPStrategy
 from omegaconf import OmegaConf
+
 from utils import instantiate_object, load_checkpoint, logger
 
 load_dotenv()  # set WANDB_API_KEY as env
