@@ -87,19 +87,16 @@ class AutoEncoderDataModule(pl.LightningDataModule):
         self.train_dataset = load_dataset(
             self.data_path,
             split="train",
-            streaming=True,
             cache_dir=self.cache_dir,
         ).skip(self.val_data_size)
 
         self.val_dataset = load_dataset(
             self.data_path,
             split="train",
-            streaming=True,
             cache_dir=self.cache_dir,
         ).take(self.val_data_size)
 
     def setup(self, stage: str):
-        self.prepare_data() # should be removed
         if stage == "fit":
             train_shuffled_dataset = self.train_dataset.shuffle(
                 seed=self.seed,
