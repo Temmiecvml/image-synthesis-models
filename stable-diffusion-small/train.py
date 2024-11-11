@@ -2,13 +2,17 @@ import argparse
 import datetime
 
 import lightning.pytorch as pl
-from omegaconf import OmegaConf
+from dotenv import load_dotenv
 from lightning.pytorch import seed_everything
-from utils import instantiate_object, load_checkpoint, logger
+from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.strategies import FSDPStrategy
+from omegaconf import OmegaConf
+from utils import instantiate_object, load_checkpoint, logger
+
+load_dotenv()  # set WANDB_API_KEY as env
 
 
-def train_model(config_path, ckpt: str):
+def train_model(config_path, ckpt: str, metric_logger):
     config = OmegaConf.load(config_path)
     config.data.seed = args.seed
 
@@ -23,9 +27,7 @@ def train_model(config_path, ckpt: str):
     data_module = instantiate_object(config.data)
 
     trainer = pl.Trainer(
-        max_epochs=10,
-        accelerator="gpu",
-        strategy=FSDPStrategy()
+        max_epochs=10, accelerator="gpu", strategy="ddp", logger=metric_logger
     )
 
     trainer.fit(model, datamodule=data_module)
@@ -77,14 +79,18 @@ if __name__ == "__main__":
     args = parse_arguments()
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
 
+    wandb_logger = WandbLogger(
+        project="stable_diffusion_small", prefix="poc", save_dir="logs"
+    )
+
     seed_everything(args.seed)
 
     try:
         if args.autoencoder_config:
-            train_model(args.autoencoder_config, args.autoencoder_cpkt)
+            train_model(args.autoencoder_config, args.autoencoder_cpkt, wandb_logger)
 
         if args.ldm_config:
-            train_model(args.ldm_config, args.ldm_cpkt)
+            train_model(args.ldm_config, args.ldm_cpkt, wandb_logger)
 
         # import torch
 

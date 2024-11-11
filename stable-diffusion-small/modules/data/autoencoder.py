@@ -1,13 +1,13 @@
 import sys
 from functools import partial
 
+import lightning.pytorch as pl
 import numpy as np
-import pytorch_lightning as pl
 import torch
-from datasets import load_dataset, Dataset as HfDataset
-from torch.utils.data import Dataset, DataLoader
+from datasets import Dataset as HfDataset
+from datasets import load_dataset
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
-
 
 
 def preprocess_celebahq_caption(samples, transform):
@@ -24,11 +24,12 @@ def collate_celebahq_caption(samples):
 
     return images, texts
 
+
 class BatchHuggingFaceDataset(Dataset):
     def __init__(self, hf_dataset, preprocess_fn, batch_size):
         """
         Custom Dataset to apply transformations in batch.
-        
+
         Args:
             hf_dataset: Hugging Face dataset.
             preprocess_fn: preprocessing function.
@@ -46,7 +47,7 @@ class BatchHuggingFaceDataset(Dataset):
         end_idx = min(start_idx + self.batch_size, len(self.hf_dataset))
         batch = HfDataset.from_dict(self.hf_dataset[start_idx:end_idx])
         batch = batch.map(preprocess_fn, batched=True)
-        
+
         return batch
 
 
@@ -116,18 +117,16 @@ class AutoEncoderDataModule(pl.LightningDataModule):
             cache_dir=self.cache_dir,
         )
 
-
     def setup(self, stage: str):
         if not hasattr(self, "dataset"):
             self.prepare_data()
 
         if stage == "fit":
-            dataset = self.dataset.train_test_split(test_size=self.train_val_split, shuffle=True, seed=32)
+            dataset = self.dataset.train_test_split(
+                test_size=self.train_val_split, shuffle=True, seed=32
+            )
             self.train_ds = BatchHuggingFaceDataset(self.train_ds, batch_size)
-            self.val_ds = BatchHuggingFaceDataset(
-                         dataset['test'], batch_size
-                    )
-            
+            self.val_ds = BatchHuggingFaceDataset(dataset["test"], batch_size)
 
     def train_dataloader(self):
         return DataLoader(

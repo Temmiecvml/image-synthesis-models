@@ -9,9 +9,9 @@ from utils import (
     extract_into_tensor,
     instantiate_object,
     load_checkpoint,
+    logger,
     make_beta_schedule,
     timestep_embedding,
-    logger,
 )
 
 
