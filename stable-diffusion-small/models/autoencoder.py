@@ -9,11 +9,18 @@ class VAutoEncoder(pl.LightningModule):
         self, encoder_config, decoder_config, lr: float = 1e-3, beta_scale: float = 1
     ):
         super().__init__()
-        self.dev0 = dev0
-        self.dev1 = dev1
         self.save_hyperparameters()
-        self.encoder = instantiate_object(encoder_config).to(dev0)
-        self.decoder = instantiate_object(decoder_config).to(dev1)
+        self.rank = self.global_rank
+        
+        if self.rank % 2 == 0:
+            # Even rank: Assign encoder
+            self.encoder = instantiate_object(encoder_config).to(self.device)
+            self.decoder = None
+        else:
+            # Odd rank: Assign decoder
+            self.encoder = None
+            self.decoder = instantiate_object(decoder_config).to(self.device)
+
         self.lr = lr
         self.beta_scale = beta_scale
 
