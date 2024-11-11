@@ -4,9 +4,10 @@ from functools import partial
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from datasets import load_dataset
-from torch.utils.data import DataLoader
+from datasets import load_dataset, Dataset as HfDataset
+from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
+
 
 
 def preprocess_celebahq_caption(samples, transform):
@@ -22,6 +23,31 @@ def collate_celebahq_caption(samples):
     texts = np.stack([sample["text"] for sample in samples])
 
     return images, texts
+
+class BatchHuggingFaceDataset(Dataset):
+    def __init__(self, hf_dataset, preprocess_fn, batch_size):
+        """
+        Custom Dataset to apply transformations in batch.
+        
+        Args:
+            hf_dataset: Hugging Face dataset.
+            preprocess_fn: preprocessing function.
+            batch_size: Number of items in each batch.
+        """
+        self.hf_dataset = hf_dataset
+        self.preprocess_fn = preprocess_fn
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return len(self.hf_dataset)
+
+    def __getitem__(self, idx):
+        start_idx = idx * self.batch_size
+        end_idx = min(start_idx + self.batch_size, len(self.hf_dataset))
+        batch = HfDataset.from_dict(self.hf_dataset[start_idx:end_idx])
+        batch = batch.map(preprocess_fn, batched=True)
+        
+        return batch
 
 
 class CustomResizeAndCrop:
@@ -55,7 +81,7 @@ class AutoEncoderDataModule(pl.LightningDataModule):
         num_workers: int,
         preprocess_batch_fn: str,
         collate_fn: str,
-        val_data_size: int,
+        train_val_split: int,
         cache_dir: str = None,
     ):
         super().__init__()
@@ -65,7 +91,7 @@ class AutoEncoderDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_workers = num_workers
-        self.val_data_size = val_data_size
+        self.train_val_split = train_val_split
         self.cache_dir = cache_dir
         # https://pytorch.org/docs/stable/data.html
         # https://github.com/pytorch/pytorch/issues/13246
@@ -84,44 +110,31 @@ class AutoEncoderDataModule(pl.LightningDataModule):
         self.collate_fn = getattr(sys.modules[__name__], collate_fn, None)
 
     def prepare_data(self):
-        self.train_dataset = load_dataset(
+        self.dataset = load_dataset(
             self.data_path,
             split="train",
             cache_dir=self.cache_dir,
-        ).skip(self.val_data_size)
+        )
 
-        self.val_dataset = load_dataset(
-            self.data_path,
-            split="train",
-            cache_dir=self.cache_dir,
-        ).take(self.val_data_size)
 
     def setup(self, stage: str):
+        if not hasattr(self, "dataset"):
+            self.prepare_data()
+
         if stage == "fit":
-            train_shuffled_dataset = self.train_dataset.shuffle(
-                seed=self.seed,
-                buffer_size=self.buffer_size,
-            )
-
-            val_shuffled_dataset = self.val_dataset.shuffle(
-                seed=self.seed,
-                buffer_size=self.buffer_size,
-            )
-
-            self.train_ds = train_shuffled_dataset.map(
-                self.preprocess_batch, batch_size=self.batch_size, batched=True
-            )
-
-            self.val_ds = val_shuffled_dataset.map(
-                self.preprocess_batch, batch_size=self.batch_size, batched=True
-            )
+            dataset = self.dataset.train_test_split(test_size=self.train_val_split, shuffle=True, seed=32)
+            self.train_ds = BatchHuggingFaceDataset(self.train_ds, batch_size)
+            self.val_ds = BatchHuggingFaceDataset(
+                         dataset['test'], batch_size
+                    )
+            
 
     def train_dataloader(self):
         return DataLoader(
             dataset=self.train_ds,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            persistent_workers=True,
+            persistent_workers=self.num_workers > 0,
             collate_fn=self.collate_fn,
         )
 
@@ -130,6 +143,6 @@ class AutoEncoderDataModule(pl.LightningDataModule):
             dataset=self.val_ds,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            persistent_workers=True,
+            persistent_workers=self.num_workers > 0,
             collate_fn=self.collate_fn,
         )

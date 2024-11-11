@@ -26,9 +26,9 @@ data:
   params:
     data_path: "Ryan-sjtu/celebahq-caption" 
     seed: 52    
-    batch_size: 8                  
-    image_size: 512                   
-    num_workers: 1                   
+    batch_size: 512                  
+    image_size: 128                   
+    num_workers: 10                   
     buffer_size: 512                
     val_data_size: 2000                          
     preprocess_batch_fn: "preprocess_celebahq_caption"
