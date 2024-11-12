@@ -11,14 +11,14 @@ model:
     encoder_config:
       target: modules.autoencoder.encoder.VEncoder
       params:
-        base_channels: 64 # 192
-        num_groups: 2 # 32
+        base_channels: 192
+        num_groups: 32
         z_scale_factor: 0.18215
     decoder_config:
       target: modules.autoencoder.decoder.VDecoder
       params:
-        base_channels: 64 # 192
-        num_groups: 2 # 32
+        base_channels: 192
+        num_groups: 32
         z_scale_factor: 0.18215
 
 data:
@@ -26,8 +26,8 @@ data:
   params:
     data_path: "Ryan-sjtu/celebahq-caption" 
     seed: 52    
-    batch_size: 512                  
-    image_size: 128                   
+    batch_size: 8                  
+    image_size: 512                   
     num_workers: 10                   
     buffer_size: 512                
     train_val_split: 0.05                        
