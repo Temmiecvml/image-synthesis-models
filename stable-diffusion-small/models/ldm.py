@@ -1,7 +1,7 @@
 from functools import partial
 from typing import List, Optional
 
-import lightning.pytorch as pl
+import lightning as L
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -16,7 +16,7 @@ from utils import (
 )
 
 
-class LDM(pl.LightningModule):
+class LDM(L.LightningModule):
     def __init__(
         self,
         unet_config,

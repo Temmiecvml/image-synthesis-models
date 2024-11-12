@@ -1,7 +1,7 @@
 import argparse
 import datetime
 
-import lightning.pytorch as pl
+import lightning as L
 from dotenv import load_dotenv
 from lightning.pytorch import seed_everything
 from lightning.pytorch.loggers import WandbLogger
@@ -27,9 +27,7 @@ def train_model(config_path, ckpt: str, metric_logger):
 
     data_module = instantiate_object(config.data)
 
-    trainer = pl.Trainer(
-        max_epochs=10, accelerator="gpu", strategy="ddp", logger=metric_logger
-    )
+    trainer = L.Trainer(max_epochs=10, accelerator="mps", logger=metric_logger)
 
     trainer.fit(model, datamodule=data_module)
 

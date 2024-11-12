@@ -1,7 +1,7 @@
 import sys
 from functools import partial
 
-import lightning.pytorch as pl
+import lightning as L
 import numpy as np
 import torch
 from datasets import Dataset as HfDataset
@@ -10,51 +10,43 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
 
-def preprocess_celebahq_caption(samples, transform):
-    if not samples["text"] or not samples["image"]:
-        return torch.Tensor([]), np.array([])
-
+def preprocess_celebahq_caption(sample, transform):
     prefix = "a photography of"
-    samples["text"] = [i.lower().removeprefix(prefix).strip() for i in samples["text"]]
-    samples["image"] = [transform(i) for i in samples["image"]]
+    image = transform(sample["image"])
+    text = sample["text"].lower().removeprefix(prefix).strip()
 
-    texts = np.stack(samples["text"])
-    images = torch.stack(samples["image"])
-
-    return images, texts
+    return image, text
 
 
 def collate_celebahq_caption(samples):
-    images = torch.stack([sample["image"] for sample in samples])
-    texts = np.stack([sample["text"] for sample in samples])
+    images, texts = zip(*samples)
+
+    images = torch.stack(images)
+    texts = np.stack(texts)
 
     return images, texts
 
 
-class BatchHuggingFaceDataset(Dataset):
-    def __init__(self, hf_dataset, preprocess_fn, batch_size):
+class PytorchHuggingFaceDataset(Dataset):
+    def __init__(self, hf_dataset, preprocess_fn):
         """
         Custom Dataset to apply transformations in batch.
 
         Args:
             hf_dataset: Hugging Face dataset.
-            preprocess_fn: preprocessing function.
-            batch_size: Number of items in each batch.
+            preprocess_fn: Function to preprocess a batch of data.
         """
         self.hf_dataset = hf_dataset
         self.preprocess_fn = preprocess_fn
-        self.batch_size = batch_size
 
     def __len__(self):
         return len(self.hf_dataset)
 
     def __getitem__(self, idx):
-        start_idx = idx * self.batch_size
-        end_idx = min(start_idx + self.batch_size, len(self.hf_dataset))
-        batch = self.hf_dataset[start_idx:end_idx]
-        images, texts = self.preprocess_fn(batch)
+        data_point = self.hf_dataset[idx]
+        image, text = self.preprocess_fn(data_point)
 
-        return images, texts
+        return image, text
 
 
 class CustomResizeAndCrop:
@@ -77,7 +69,7 @@ class CustomResizeAndCrop:
         return final_image
 
 
-class AutoEncoderDataModule(pl.LightningDataModule):
+class AutoEncoderDataModule(L.LightningDataModule):
     def __init__(
         self,
         data_path: str,
@@ -131,11 +123,11 @@ class AutoEncoderDataModule(pl.LightningDataModule):
             dataset = self.dataset.train_test_split(
                 test_size=self.train_val_split, shuffle=True, seed=32
             )
-            self.train_ds = BatchHuggingFaceDataset(
-                dataset["train"], self.preprocess_batch, self.batch_size
+            self.train_ds = PytorchHuggingFaceDataset(
+                dataset["train"], self.preprocess_batch
             )
-            self.val_ds = BatchHuggingFaceDataset(
-                dataset["test"], self.preprocess_batch, self.batch_size
+            self.val_ds = PytorchHuggingFaceDataset(
+                dataset["test"], self.preprocess_batch
             )
 
     def train_dataloader(self):

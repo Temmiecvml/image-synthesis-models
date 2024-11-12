@@ -1,35 +1,27 @@
-import lightning.pytorch as pl
+import lightning as L
 import torch
 import torch.nn.functional as F
 
 from utils import instantiate_object
 
 
-class VAutoEncoder(pl.LightningModule):
+class VAutoEncoder(L.LightningModule):
     def __init__(
         self, encoder_config, decoder_config, lr: float = 1e-3, beta_scale: float = 1
     ):
         super().__init__()
         self.save_hyperparameters()
-        rank = self.global_rank
 
-        if rank % 2 == 0:
-            self.encoder = instantiate_object(encoder_config).to(rank)
-            self.decoder = instantiate_object(decoder_config).to(rank + 1)
+        self.encoder = instantiate_object(encoder_config)
+        self.decoder = instantiate_object(decoder_config)
 
         self.lr = lr
         self.beta_scale = beta_scale
 
     def forward(self, x):
-        rank = self.global_rank
-        if rank % 2 == 0:
-            x = x.to(rank)
-            z, mean, log_var = self.encoder(x)
-            z = z.to(rank + 1)
-
-            recon_x = self.decoder(z)
-
-            return recon_x, mean, log_var
+        z, mean, log_var = self.encoder(x)
+        recon_x = self.decoder(z)
+        return recon_x, mean, log_var
 
     def decode(self, z):
         recon_x = self.decoder(z)
