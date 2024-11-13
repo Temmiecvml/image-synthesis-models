@@ -1,24 +1,30 @@
 import lightning as L
 import torch
 import torch.nn.functional as F
-
-from utils import instantiate_object
+from utils import instantiate_object, log_reconstruction
 
 
 class VAutoEncoder(L.LightningModule):
     def __init__(
-        self, encoder_config, decoder_config, lr: float = 1e-3, beta_scale: float = 1
+        self,
+        encoder_config,
+        decoder_config,
+        ckpt_dir,
+        lr: float = 1e-3,
+        beta_scale: float = 1,
     ):
         super().__init__()
-        self.save_hyperparameters()
 
         self.encoder_config = encoder_config
         self.decoder_config = decoder_config
         self.encoder = None
         self.decoder = None
+        self.ckpt_dir = ckpt_dir
 
         self.lr = lr
         self.beta_scale = beta_scale
+
+        self.save_hyperparameters()
 
     def configure_model(self):
         if self.encoder is not None or self.decoder is not None:
@@ -48,6 +54,10 @@ class VAutoEncoder(L.LightningModule):
         recon_x, mu, logvar = self(x)
         loss = self.loss_function(recon_x, x, mu, logvar)
         self.log("val_loss", loss)
+        if batch_idx == 0:
+            log_reconstruction(
+                self.logger, x, recon_x, self.current_epoch, self.global_step
+            )
 
     def test_step(self, batch, batch_idx):
         x, _ = batch
@@ -63,14 +73,18 @@ class VAutoEncoder(L.LightningModule):
         return MSE + beta * KLD
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode="min", factor=0.2, patience=5, min_lr=1e-6
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=1e-5)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer,
+            T_0=10,  # Number of epochs for the first restart
+            T_mult=2,  # Multiplier for the number of epochs between restarts
+            eta_min=1e-6,  # Minimum learning rate
         )
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "val_loss",
+                "interval": "epoch",
+                "frequency": 1,
             },
         }

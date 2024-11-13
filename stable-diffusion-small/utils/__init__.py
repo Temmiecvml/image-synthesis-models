@@ -10,6 +10,7 @@ from .utils import (
     load_checkpoint,
     load_first_stage_encoder,
     load_images_to_tensor,
+    log_reconstruction,
     save_checkpoint,
     tensor_to_pil_images,
 )

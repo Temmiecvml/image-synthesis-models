@@ -9,9 +9,8 @@ from itertools import islice
 import cv2
 import numpy as np
 import torch
-from diffusers.pipelines.stable_diffusion.safety_checker import (
-    StableDiffusionSafetyChecker,
-)
+from diffusers.pipelines.stable_diffusion.safety_checker import \
+    StableDiffusionSafetyChecker
 from einops import rearrange
 from imwatermark import WatermarkEncoder
 from ldm.models.diffusion.ddim import DDIMSampler

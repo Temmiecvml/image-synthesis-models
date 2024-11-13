@@ -1,11 +1,37 @@
 import importlib
 import os
+import random
 from typing import Optional
 
 import torch
+import wandb
+from lightning.pytorch.callbacks import Callback
 from omegaconf import OmegaConf
 from PIL import Image
 from torchvision import transforms
+
+
+def log_reconstruction(
+    logger,
+    images,
+    recon_x,
+    epoch,
+    step,
+    num_samples=5,
+) -> None:
+    """Log Reconstruction"""
+    random_indices = random.sample(range(images.size(0)), num_samples)
+    images = [images[idx] for idx in random_indices]
+    reconstructions = [recon_x[idx] for idx in random_indices]
+
+    columns = ["original", "reconstruction"]
+    data = [
+        [wandb.Image(img), wandb.Image(recon)]
+        for img, recon in zip(images, reconstructions)
+    ]
+    logger.log_table(
+        key=f"reconstruction/epoch-{epoch}-step-{step}", columns=columns, data=data
+    )
 
 
 def instantiate_object(config, instantiate=True, **kwargs):

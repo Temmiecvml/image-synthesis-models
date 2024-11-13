@@ -7,10 +7,9 @@ import torch
 import torch.nn as nn
 from dotenv import load_dotenv
 from lightning.pytorch import seed_everything
-from lightning.pytorch.callbacks import RichProgressBar
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.strategies import FSDPStrategy
-from lightning.pytorch.callbacks import ModelCheckpoint
 from modules.autoencoder.attention_block import VAttentionBlock
 from modules.autoencoder.residual_block import VResidualBlock
 from omegaconf import OmegaConf
@@ -23,7 +22,7 @@ torch.set_float32_matmul_precision("medium")
 
 
 def get_fsdp_strategy(
-    model_type,
+    model_name,
     min_wrap_params,
 ):
 
@@ -31,7 +30,7 @@ def get_fsdp_strategy(
         size_based_auto_wrap_policy, min_num_params=min_wrap_params, recurse=True
     )
 
-    if model_type == "autoencoder":
+    if model_name == "autoencoder":
         activation_checkpointing_policy = {
             VResidualBlock,
             VAttentionBlock,
@@ -46,7 +45,11 @@ def get_fsdp_strategy(
 
 def train_model(config, ckpt: str, seed: int, metric_logger):
 
+    now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    ckpt_dir = config.train.checkpoint_dir.replace("{date}", now)
+
     config.data.seed = seed
+    config.model.ckpt_dir = ckpt_dir
 
     if ckpt:
         logger.info(f"Loading Model at: {ckpt}")
@@ -54,34 +57,47 @@ def train_model(config, ckpt: str, seed: int, metric_logger):
 
     else:
         logger.info(f"Instatialing Model with config at: {config}")
-        model = instantiate_object(config.model)
+        model = instantiate_object(config.model, ckpt_dir=ckpt_dir)
 
     data_module = instantiate_object(config.data)
-    metric_logger.watch(model, log="all")
+    metric_logger.watch(model, log="gradients")
 
     trainer = L.Trainer(
         strategy=get_fsdp_strategy(
-            config.train.model_type, config.train.min_wrap_params
+            config.train.model_name, config.train.min_wrap_params
         ),
         devices=torch.cuda.device_count(),
         precision=config.train.precision,
         accumulate_grad_batches=config.train.accumulate_grad_batches,
         max_epochs=config.train.max_epochs,
+        val_check_interval=config.train.val_check_interval,
         accelerator=config.train.accelerator,
         logger=metric_logger,
-        ckpt_path = ckpt,
-        callbacks=[RichProgressBar(),
-                   ModelCheckpoint(
-                        save_top_k=2,
-                        monitor="val_loss",
-                        mode="min",
-                        dirpath=config.train.checkpoint_dir,
-                        filename="sample-mnist-{epoch:02d}-{val_loss:.2f}",
-                    )
-                   ],
+        callbacks=[
+            RichProgressBar(),
+            ModelCheckpoint(
+                save_top_k=2,
+                monitor="val_loss",
+                mode="min",
+                dirpath=ckpt_dir,
+                filename=f"{config.train.model_name}" + "-{epoch:02d}-{val_loss:.2f}",
+            ),
+            EarlyStopping(
+                monitor="val_loss",
+                mode="min",
+                check_finite=True,
+                min_delta=config.train.early_stopping_min_delta,
+                patience=config.train.early_stopping_patience,
+                verbose=True,
+            ),
+        ],
     )
 
-    trainer.fit(model, datamodule=data_module)
+    trainer.fit(
+        model,
+        datamodule=data_module,
+        ckpt_path=ckpt,
+    )
 
     logger.info(
         f"Started training Model {config.model.target} with data: {config.data.target}"
@@ -112,7 +128,6 @@ def parse_arguments():
 
 if __name__ == "__main__":
     args = parse_arguments()
-    now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
 
     config = OmegaConf.load(args.config)
     ckpt = args.cpkt if args.cpkt else None

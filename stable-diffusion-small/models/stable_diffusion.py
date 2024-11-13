@@ -5,7 +5,6 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 from tqdm import tqdm
-
 from utils import (
     extract_into_tensor,
     load_first_stage_encoder,
