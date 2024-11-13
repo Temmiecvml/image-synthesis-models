@@ -109,6 +109,7 @@ class AutoEncoderDataModule(L.LightningDataModule):
         self.collate_fn = getattr(sys.modules[__name__], collate_fn, None)
 
     def prepare_data(self):
+        """For downloading the dataset"""
         self.dataset = load_dataset(
             self.data_path,
             split="train",
@@ -116,8 +117,15 @@ class AutoEncoderDataModule(L.LightningDataModule):
         )
 
     def setup(self, stage: str):
-        if not hasattr(self, "dataset"):
-            self.prepare_data()
+        """For loading and processing the dataset
+
+        Huggingface API for downloading and loading is the same
+        """
+        self.dataset = load_dataset(
+            self.data_path,
+            split="train",
+            cache_dir=self.cache_dir,
+        )
 
         if stage == "fit":
             dataset = self.dataset.train_test_split(

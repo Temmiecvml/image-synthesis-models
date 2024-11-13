@@ -11,11 +11,20 @@ class VAutoEncoder(L.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.encoder = instantiate_object(encoder_config)
-        self.decoder = instantiate_object(decoder_config)
+        self.encoder_config = encoder_config
+        self.decoder_config = decoder_config
+        self.encoder = None
+        self.decoder = None
 
         self.lr = lr
         self.beta_scale = beta_scale
+
+    def configure_model(self):
+        if self.encoder is not None or self.decoder is not None:
+            return
+
+        self.encoder = instantiate_object(self.encoder_config)
+        self.decoder = instantiate_object(self.decoder_config)
 
     def forward(self, x):
         z, mean, log_var = self.encoder(x)

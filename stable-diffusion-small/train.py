@@ -1,6 +1,5 @@
 import argparse
 import datetime
-import functools
 from functools import partial
 
 import lightning as L
@@ -8,8 +7,11 @@ import torch
 import torch.nn as nn
 from dotenv import load_dotenv
 from lightning.pytorch import seed_everything
+from lightning.pytorch.callbacks import RichProgressBar
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.strategies import FSDPStrategy
+from modules.autoencoder.attention_block import VAttentionBlock
+from modules.autoencoder.residual_block import VResidualBlock
 from omegaconf import OmegaConf
 from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
 from utils import instantiate_object, load_checkpoint, logger
@@ -18,28 +20,17 @@ load_dotenv()  # set WANDB_API_KEY as env
 
 torch.set_float32_matmul_precision("medium")
 
-MIN_FSDP_WRAP_PARAMS = 2_000
+MIN_FSDP_WRAP_PARAMS = 100_000
 
 
-def custom_auto_wrap_policy(
-    module: nn.Module,
-    recurse: bool,
-    nonwrapped_numel: int,
-    min_num_params: int = int(1e8),
-) -> bool:
-    return nonwrapped_numel >= min_num_params
-
-
-# Configure a custom `min_num_params`
-my_auto_wrap_policy = functools.partial(
-    custom_auto_wrap_policy, min_num_params=int(MIN_FSDP_WRAP_PARAMS), recurse=True
+my_auto_wrap_policy = partial(
+    size_based_auto_wrap_policy, min_num_params=MIN_FSDP_WRAP_PARAMS, recurse=True
 )
 
-# my_auto_wrap_policy = partial(
-#         size_based_auto_wrap_policy,
-#         min_num_params=MIN_FSDP_WRAP_PARAMS,
-#         recurse=True
-#     )
+activation_checkpointing_policy = {
+    VResidualBlock,
+    VAttentionBlock,
+}
 
 
 def train_model(config_path, ckpt: str, metric_logger):
@@ -59,15 +50,16 @@ def train_model(config_path, ckpt: str, metric_logger):
     trainer = L.Trainer(
         strategy=FSDPStrategy(
             auto_wrap_policy=my_auto_wrap_policy,
+            activation_checkpointing_policy=activation_checkpointing_policy,
             sharding_strategy="FULL_SHARD",
-            cpu_offload=True,
-            mixed_precision=True,
         ),
-        devices=4,
+        devices=torch.cuda.device_count(),
         precision="16-mixed",
+        accumulate_grad_batches=2,
         max_epochs=10,
         accelerator="gpu",
         logger=metric_logger,
+        callbacks=[RichProgressBar()],
     )
 
     trainer.fit(model, datamodule=data_module)
