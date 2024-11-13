@@ -10,6 +10,7 @@ from lightning.pytorch import seed_everything
 from lightning.pytorch.callbacks import RichProgressBar
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.strategies import FSDPStrategy
+from lightning.pytorch.callbacks import ModelCheckpoint
 from modules.autoencoder.attention_block import VAttentionBlock
 from modules.autoencoder.residual_block import VResidualBlock
 from omegaconf import OmegaConf
@@ -20,22 +21,32 @@ load_dotenv()  # set WANDB_API_KEY as env
 
 torch.set_float32_matmul_precision("medium")
 
-MIN_FSDP_WRAP_PARAMS = 100_000
+
+def get_fsdp_strategy(
+    model_type,
+    min_wrap_params,
+):
+
+    my_auto_wrap_policy = partial(
+        size_based_auto_wrap_policy, min_num_params=min_wrap_params, recurse=True
+    )
+
+    if model_type == "autoencoder":
+        activation_checkpointing_policy = {
+            VResidualBlock,
+            VAttentionBlock,
+        }
+
+    return FSDPStrategy(
+        auto_wrap_policy=my_auto_wrap_policy,
+        activation_checkpointing_policy=activation_checkpointing_policy,
+        sharding_strategy="FULL_SHARD",
+    )
 
 
-my_auto_wrap_policy = partial(
-    size_based_auto_wrap_policy, min_num_params=MIN_FSDP_WRAP_PARAMS, recurse=True
-)
+def train_model(config, ckpt: str, seed: int, metric_logger):
 
-activation_checkpointing_policy = {
-    VResidualBlock,
-    VAttentionBlock,
-}
-
-
-def train_model(config_path, ckpt: str, metric_logger):
-    config = OmegaConf.load(config_path)
-    config.data.seed = args.seed
+    config.data.seed = seed
 
     if ckpt:
         logger.info(f"Loading Model at: {ckpt}")
@@ -49,18 +60,25 @@ def train_model(config_path, ckpt: str, metric_logger):
     metric_logger.watch(model, log="all")
 
     trainer = L.Trainer(
-        strategy=FSDPStrategy(
-            auto_wrap_policy=my_auto_wrap_policy,
-            activation_checkpointing_policy=activation_checkpointing_policy,
-            sharding_strategy="FULL_SHARD",
+        strategy=get_fsdp_strategy(
+            config.train.model_type, config.train.min_wrap_params
         ),
         devices=torch.cuda.device_count(),
-        precision="16-mixed",
-        accumulate_grad_batches=2,
-        max_epochs=10,
-        accelerator="gpu",
+        precision=config.train.precision,
+        accumulate_grad_batches=config.train.accumulate_grad_batches,
+        max_epochs=config.train.max_epochs,
+        accelerator=config.train.accelerator,
         logger=metric_logger,
-        callbacks=[RichProgressBar()],
+        ckpt_path = ckpt,
+        callbacks=[RichProgressBar(),
+                   ModelCheckpoint(
+                        save_top_k=2,
+                        monitor="val_loss",
+                        mode="min",
+                        dirpath=config.train.checkpoint_dir,
+                        filename="sample-mnist-{epoch:02d}-{val_loss:.2f}",
+                    )
+                   ],
     )
 
     trainer.fit(model, datamodule=data_module)
@@ -74,29 +92,13 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Stable Diffusion Training Parameters")
 
     parser.add_argument(
-        "--autoencoder_config",
+        "--config",
         type=str,
         default="",
         help="Path to the YAML configuration file.",
     )
 
-    parser.add_argument(
-        "--ldm_config",
-        type=str,
-        default="",
-        help="Path to the YAML configuration file.",
-    )
-
-    parser.add_argument(
-        "--autoencoder_cpkt", type=str, default="", help="autoencoder checkpoint path"
-    )
-
-    parser.add_argument(
-        "--ldm_cpkt",
-        type=str,
-        default="",
-        help="latent diffusion model checkpoint path",
-    )
+    parser.add_argument("--cpkt", type=str, default="", help="checkpoint path")
 
     parser.add_argument(
         "--seed",
@@ -112,18 +114,19 @@ if __name__ == "__main__":
     args = parse_arguments()
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
 
+    config = OmegaConf.load(args.config)
+    ckpt = args.cpkt if args.cpkt else None
+
     wandb_logger = WandbLogger(
-        project="stable_diffusion_small", prefix="poc", save_dir="logs"
+        project=f"stable_diffusion_{config.train.model_name}",
+        prefix="poc",
+        save_dir="logs",
     )
 
     seed_everything(args.seed)
 
     try:
-        if args.autoencoder_config:
-            train_model(args.autoencoder_config, args.autoencoder_cpkt, wandb_logger)
-
-        if args.ldm_config:
-            train_model(args.ldm_config, args.ldm_cpkt, wandb_logger)
+        train_model(config, ckpt, args.seed, wandb_logger)
 
         # import torch
 

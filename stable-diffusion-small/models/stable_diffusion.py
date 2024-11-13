@@ -5,9 +5,15 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 from tqdm import tqdm
-from utils import (extract_into_tensor, load_images_to_tensor,
-                   load_trained_model, logger, make_beta_schedule,
-                   tensor_to_pil_images)
+
+from utils import (
+    extract_into_tensor,
+    load_first_stage_encoder,
+    load_images_to_tensor,
+    logger,
+    make_beta_schedule,
+    tensor_to_pil_images,
+)
 
 
 def process_prompt(prompt: str, cfg_scale: float):
@@ -40,8 +46,8 @@ def process_image_paths(
 
 
 def load_models(config):
-    autoencoder_model = load_trained_model(config.autoencoder)
-    ddpm_model = load_trained_model(config.ddpm)
+    autoencoder_model = load_first_stage_encoder(config.autoencoder)
+    ddpm_model = load_first_stage_encoder(config.ddpm)
 
     return {"autoencoder": autoencoder_model, "ddpm": ddpm_model}
 

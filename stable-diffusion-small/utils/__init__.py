@@ -4,9 +4,15 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
 from .diffusion import make_beta_schedule, timestep_embedding
-from .utils import (extract_into_tensor, instantiate_object, load_checkpoint,
-                    load_images_to_tensor, load_trained_model,
-                    tensor_to_pil_images)
+from .utils import (
+    extract_into_tensor,
+    instantiate_object,
+    load_checkpoint,
+    load_first_stage_encoder,
+    load_images_to_tensor,
+    save_checkpoint,
+    tensor_to_pil_images,
+)
 
 
 def setup_logger(name=__name__, level=logging.INFO, log_dir="logs"):

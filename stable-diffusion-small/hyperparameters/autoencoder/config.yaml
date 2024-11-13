@@ -1,4 +1,12 @@
 train:
+  model_name: "autoencoder"
+  run_name: "alpha_run_"
+  checkpoint_dir: "ae-ryan-sjtu-celebahq-caption/"
+  precision: 16-mixed
+  accelerator:  gpu
+  accumulate_grad_batches: 1
+  min_wrap_params: 200_000
+  max_epochs: 100
   
 
 inference:

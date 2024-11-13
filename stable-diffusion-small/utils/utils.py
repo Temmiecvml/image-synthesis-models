@@ -8,15 +8,7 @@ from PIL import Image
 from torchvision import transforms
 
 
-def load_trained_model(config, ckpt_path: str = ""):
-
-    if not ckpt_path:
-        model = instantiate_object(config)
-
-    return model
-
-
-def instantiate_object(config, **kwargs):
+def instantiate_object(config, instantiate=True, **kwargs):
     if not "target" in config:
         raise KeyError("Expected key `target` to instantiate.")
 
@@ -25,9 +17,10 @@ def instantiate_object(config, **kwargs):
     module_imp = importlib.import_module(module)
     params = config.get("params", dict())
     params.update(kwargs)
-    object = getattr(module_imp, cls)(**params)
+    if instantiate:
+        return getattr(module_imp, cls)(**params)
 
-    return object
+    return getattr(module_imp, cls)
 
 
 def extract_into_tensor(a, t, x_shape):
@@ -107,9 +100,26 @@ def tensor_to_pil_images(tensor_batch):
     return pil_images
 
 
-def save_checkpoint():
-    pass
+def load_checkpoint(config, checkpoint_path: str):
+    lightning_module = instantiate_object(config, instantiate=False)
+    model = lightning_module.load_from_checkpoint(checkpoint_path=checkpoint_path)
+
+    return model
 
 
-def load_checkpoint():
-    pass
+def load_first_stage_encoder(config, ckpt_path):
+    checkpoint = torch.load(ckpt_path)
+    encoder_weights = {
+        k.replace("encoder.", ""): v
+        for k, v in checkpoint["state_dict"].items()
+        if k.startswith("encoder.")
+    }
+
+    encoder = instantiate_object(config)
+    encoder = encoder.load_state_dict(encoder_weights)
+
+    return encoder
+
+
+def save_checkpoint(trainer, checkpoint_dir: str):
+    trainer.save_checkpoint(checkpoint_dir)
