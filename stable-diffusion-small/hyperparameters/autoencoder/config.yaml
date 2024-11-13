@@ -7,7 +7,7 @@ train:
   accumulate_grad_batches: 5
   min_wrap_params: 200_000
   max_epochs: 100
-  val_check_interval: 0.05 # 0-1 indicates fraction of an epoch. >1 indicates number of batches/steps
+  val_check_interval: 0.25 # 0-1 indicates fraction of an epoch. >1 indicates number of batches/steps
   early_stopping_min_delta: 1e-5
   early_stopping_patience: 5
   

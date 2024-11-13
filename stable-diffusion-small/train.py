@@ -60,7 +60,7 @@ def train_model(config, ckpt: str, seed: int, metric_logger):
         model = instantiate_object(config.model, ckpt_dir=ckpt_dir)
 
     data_module = instantiate_object(config.data)
-    metric_logger.watch(model, log="gradients")
+    metric_logger.watch(model)
 
     trainer = L.Trainer(
         strategy=get_fsdp_strategy(
