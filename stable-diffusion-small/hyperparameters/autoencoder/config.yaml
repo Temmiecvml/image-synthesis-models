@@ -1,3 +1,6 @@
+train:
+  
+
 inference:
   image_width: 512
   latent_dim: 4

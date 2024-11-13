@@ -46,6 +46,7 @@ def train_model(config_path, ckpt: str, metric_logger):
         model = instantiate_object(config.model)
 
     data_module = instantiate_object(config.data)
+    metric_logger.watch(model, log="all")
 
     trainer = L.Trainer(
         strategy=FSDPStrategy(

@@ -25,6 +25,7 @@ class VAutoEncoder(L.LightningModule):
 
         self.encoder = instantiate_object(self.encoder_config)
         self.decoder = instantiate_object(self.decoder_config)
+    
 
     def forward(self, x):
         z, mean, log_var = self.encoder(x)
