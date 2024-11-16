@@ -7,8 +7,7 @@ import torch
 import torch.nn as nn
 from dotenv import load_dotenv
 from lightning.pytorch import seed_everything
-from lightning.pytorch.callbacks import (EarlyStopping, ModelCheckpoint,
-                                         RichProgressBar)
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.strategies import FSDPStrategy
 from modules.autoencoder.attention_block import VAttentionBlock

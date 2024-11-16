@@ -52,10 +52,10 @@ class VAutoEncoder(L.LightningModule):
         mse, kld, beta = self.loss_function(recon_x, x, mu, logvar)
         loss = (mse + beta * kld).mean()
 
-        self.log("mse", mse)
-        self.log("kld", kld)
-        self.log("beta", beta)
-        self.log("train_loss", loss)
+        self.log("mse", mse, batch_size=x.size[0])
+        self.log("kld", kld, batch_size=x.size[0])
+        self.log("beta", beta, batch_size=x.size[0])
+        self.log("train_loss", loss, batch_size=x.size[0])
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -63,10 +63,10 @@ class VAutoEncoder(L.LightningModule):
         recon_x, mu, logvar = self(x)
         mse, kld, beta = self.loss_function(recon_x, x, mu, logvar)
         loss = (mse + beta * kld).mean()
-        self.log("mse", mse)
-        self.log("kld", kld)
-        self.log("beta", beta)
-        self.log("val_loss", loss)
+        self.log("mse", mse, batch_size=x.size[0])
+        self.log("kld", kld, batch_size=x.size[0])
+        self.log("beta", beta, batch_size=x.size[0])
+        self.log("val_loss", loss, batch_size=x.size[0])
 
         if batch_idx == 0:
             log_reconstruction(

@@ -5,8 +5,14 @@ import lightning as L
 import numpy as np
 import torch
 import torch.nn.functional as F
-from utils import (extract_into_tensor, instantiate_object, load_checkpoint,
-                   logger, make_beta_schedule, timestep_embedding)
+from utils import (
+    extract_into_tensor,
+    instantiate_object,
+    load_first_stage_encoder,
+    logger,
+    make_beta_schedule,
+    timestep_embedding,
+)
 
 
 class LDM(L.LightningModule):
@@ -15,7 +21,8 @@ class LDM(L.LightningModule):
         unet_config,
         timestep_config,
         text_conditioner_config,
-        autoencoder_encoder_config,
+        first_stage_encoder_config,
+        first_stage_encoder_ckpt,
         beta_schedule,
         num_timesteps,
         loss_type,
@@ -24,13 +31,18 @@ class LDM(L.LightningModule):
         elbo_weight,
     ):
         super().__init__()
-        self.unet = instantiate_object(unet_config)
+
+        self.unet_config = unet_config
+        self.text_conditioner_config = text_conditioner_config
+        self.first_stage_encoder_config = first_stage_encoder_config
+        self.first_stage_encoder_ckpt = first_stage_encoder_ckpt
+
+        self.unet = None
+        self.text_conditioner = None
+        self.first_stage_encoder = None
+
         self.time_embedder = instantiate_object(timestep_config)
-        self.text_conditioner = instantiate_object(
-            text_conditioner_config, device=str(self.device)
-        )
-        self.first_stage_encoder = load_checkpoint(autoencoder_encoder_config)
-        self.text_conditioner_idle = False
+
         self.num_timesteps = int(num_timesteps)
         self.loss_type = loss_type
         self.v_posterior = v_posterior
@@ -41,6 +53,68 @@ class LDM(L.LightningModule):
             torch.full((num_timesteps,), 0.0), requires_grad=True
         )
         self.create_schedule(beta_schedule, num_timesteps)
+
+    def configure_model(self):
+        if (
+            self.unet is not None
+            or self.text_conditioner is not None
+            or self.first_stage_encoder is not None
+        ):
+            return
+
+        self.unet = instantiate_object(self.unet_config)
+        self.text_conditioner = instantiate_object(
+            self.text_conditioner_config, device=str(self.device)
+        )
+        self.first_stage_encoder = load_first_stage_encoder(
+            self.first_stage_encoder_config, self.first_stage_encoder_ckpt
+        )
+
+    def freeze_first_stage_encoder(self):
+        for param in self.first_stage_encoder.parameters():
+            param.requires_grad = False
+
+        for module in self.first_stage_encoder.modules():
+            if isinstance(module, torch.nn.BatchNorm2d) or isinstance(
+                module, torch.nn.BatchNorm1d
+            ):
+                module.eval()
+            if isinstance(module, torch.nn.Dropout) or isinstance(
+                module, torch.nn.Dropout2d
+            ):
+                module.eval()
+
+    def idle_component(self, component: str, idle: bool = True):
+        def is_on_cpu(comp):
+            for param in comp.parameters():
+                return param.device.type == "cpu"
+
+        if component not in ["text_conditioner", "first_stage_encoder"]:
+            raise ValueError(f"Invalid component {component}")
+
+        comp = getattr(self, component)
+
+        if idle and is_on_cpu(comp):
+            logger.info(f"{component} is already idle.")
+            setattr(self, f"{component}_idle", True)
+            return
+
+        if idle and not is_on_cpu(comp):
+            logger.info(f"Idling {component}")
+            setattr(self, f"{component}_idle", True)
+            comp.to("cpu")
+            return
+
+        if not idle and is_on_cpu(comp):
+            logger.info(f"Activating {component}")
+            setattr(self, f"{component}_idle", False)
+            comp.to(self.device)
+            return
+
+        if not idle and not is_on_cpu(comp):
+            logger.info(f"{component} is already active.")
+            setattr(self, f"{component}_idle", False)
+            return
 
     def create_schedule(self, beta_schedule, num_timesteps):
         betas = make_beta_schedule(
@@ -76,52 +150,6 @@ class LDM(L.LightningModule):
         )
         lvlb_weights[0] = lvlb_weights[1]
         self.register_buffer("lvlb_weights", lvlb_weights, persistent=False)
-
-    def idle_text_conditioner(self, idle: bool = True):
-        if idle and not self.text_conditioner_idle:
-            try:
-                self.text_conditioner.to("cpu")
-                self.text_conditioner_idle = True
-                logger.info("Text conditioner offloaded to CPU.")
-            except AttributeError:
-                logger.error(
-                    "Error: `text_conditioner` does not support `.to()` method. Check initialization."
-                )
-
-        elif not idle and self.text_conditioner_idle:
-            try:
-                # Reload to original device and update state
-                self.text_conditioner.to(self.device)
-                self.text_conditioner_idle = False
-                logger.info(f"Text conditioner onloaded back to {self.device}.")
-            except AttributeError:
-                logger.error(
-                    "Error: `text_conditioner` does not support `.to()` method. Check initialization."
-                )
-
-    def idle_encoder(self, idle: bool = True):
-        """Offload encoder to CPU if idle=True; reload to original device if idle=False."""
-        if idle and not self.encoder_idle:
-            try:
-                # Move encoder to CPU and update state
-                self.first_stage_encoder.to("cpu")
-                self.encoder_idle = True
-                logger.info("Encoder offloaded to CPU.")
-            except AttributeError:
-                logger.error(
-                    "Error: `first_stage_encoder` does not support `.to()` method. Check initialization."
-                )
-
-        elif not idle and self.encoder_idle:
-            try:
-                # Reload encoder to original device and update state
-                self.first_stage_encoder.to(self.device)
-                self.encoder_idle = False
-                logger.info(f"Encoder onloaded back to {self.device}.")
-            except AttributeError:
-                logger.error(
-                    "Error: `first_stage_encoder` does not support `.to()` method. Check initialization."
-                )
 
     def get_context_embedding(self, context: List[str]):
         """
@@ -225,7 +253,6 @@ class LDM(L.LightningModule):
         context: np.ndarray,
         noise: torch.Tensor,
         t: torch.Tensor,
-        prefix: str,
     ):
         """Calculate the loss"""
 
@@ -240,13 +267,13 @@ class LDM(L.LightningModule):
 
         loss = self.l_simple_weight * scaled_loss.mean()
 
-        self.log(f"{prefix}/loss_simple", loss, on_epoch=True, logger=True)
+        self.log(f"loss_simple", loss, on_epoch=True, logger=True)
 
         loss_vlb = self.get_loss(
             noise, predicted_noise, self.loss_type, mean=False
         ).mean(dim=(1, 2, 3))
         loss_vlb = self.elbo_weight * (self.lvlb_weights[t] * loss_vlb).mean()
-        self.log(f"{prefix}/loss_vlb", loss_vlb, on_epoch=True, logger=True)
+        self.log(f"loss_vlb", loss_vlb, on_epoch=True, logger=True)
 
         loss += loss_vlb
 

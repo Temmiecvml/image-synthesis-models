@@ -1,10 +1,26 @@
+shared_configs:
+  base_dims: 192
+  image_size: 256
+
+train:
+  model_name: "ldm"
+  checkpoint_dir: "ckpts/date={date}/dataset=ryan-sjtu-celebahq-caption/"
+  precision: bf16-mixed
+  accelerator: gpu
+  accumulate_grad_batches: 5
+  min_wrap_params: 200_000
+  max_epochs: 100
+  val_check_interval: 0.25 # 0-1 indicates fraction of an epoch. >1 indicates number of batches/steps
+  early_stopping_min_delta: 1e-5
+  early_stopping_patience: 10
+  
 ldm:
   target: models.ldm.LDM
   params:
     unet_config:
       target: modules.diffusion.ldm.UNet
       params:
-        base_dims: 192
+        base_dims: ${shared_configs.base_dims}
         base_context_dims: 640
         time_embedding_dims: 768
         num_heads: 6
@@ -19,7 +35,7 @@ ldm:
     timestep_config:
       target: modules.diffusion.ldm.TimeEmbedding
       params:
-        dims: 192 # base_dims
+        dims: ${shared_configs.base_dims}
 
     text_conditioner_config:
       target: modules.clip.TextConditioner
@@ -29,5 +45,24 @@ ldm:
         num_heads: 8
         clip_model: ViT-B/32
         
+    first_stage_encoder_config: "hyperparameters/autoencoder/config.yaml"
+    first_stage_encoder_ckpt: "ckpts/date=2024-11-16T07-16-53/dataset=ryan-sjtu-celebahq-caption/autoencoder-epoch=13-val_loss=9735.76.ckpt"
     beta_schedule: linear
     num_timesteps: 1000
+    loss_type: l2
+    v_posterior: 0   # weight for choosing posterior variance as sigma = (1-v) * beta_tilde + v * beta
+    l_simple_weight: 1
+    elbo_weight: 0
+
+data:
+  target: modules.data.autoencoder.AutoEncoderDataModule
+  params:
+    data_path: "Ryan-sjtu/celebahq-caption" 
+    seed: 52    
+    batch_size: 16                
+    image_size: ${shared_configs.image_size}
+    num_workers: 10                   
+    buffer_size: 512                
+    train_val_split: 0.1                       
+    preprocess_batch_fn: "preprocess_celebahq_caption"
+    collate_fn: "collate_celebahq_caption"

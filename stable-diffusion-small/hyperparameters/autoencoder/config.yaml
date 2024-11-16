@@ -7,7 +7,6 @@ shared_configs:
 
 train:
   model_name: "autoencoder"
-  run_name: "alpha_run_"
   checkpoint_dir: "ckpts/date={date}/dataset=ryan-sjtu-celebahq-caption/"
   precision: bf16-mixed
   accelerator: gpu
@@ -18,7 +17,6 @@ train:
   early_stopping_min_delta: 1e-5
   early_stopping_patience: 10
   
-
 model:
   target: models.autoencoder.VAutoEncoder
   params:
