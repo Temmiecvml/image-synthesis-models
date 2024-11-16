@@ -25,37 +25,34 @@ class UpScale(nn.Module):
 class Up(nn.Module):
     def __init__(
         self,
-        base_channels=128,
-        num_groups=32,
+        base_channels,
+        num_groups,
     ):
         super(Up, self).__init__()
 
         self.upsample = nn.Sequential(
             # f=8 , we divide by 2 again because the latents were divided by 2
-            nn.Conv2d(
-                base_channels // (32 * 2), base_channels // 32, kernel_size=1, padding=0
-            ),
-            nn.Conv2d(base_channels // 32, base_channels * 4, kernel_size=3, padding=1),
-            VResidualBlock(base_channels * 4, base_channels * 4),
+            nn.Conv2d(base_channels * 4, base_channels * 4, kernel_size=3, padding=1),
+            VResidualBlock(base_channels * 4, base_channels * 4, num_groups=num_groups),
             VAttentionBlock(base_channels * 4),
-            VResidualBlock(base_channels * 4, base_channels * 4),
-            VResidualBlock(base_channels * 4, base_channels * 4),
-            VResidualBlock(base_channels * 4, base_channels * 4),
+            VResidualBlock(base_channels * 4, base_channels * 4, num_groups=num_groups),
+            VResidualBlock(base_channels * 4, base_channels * 4, num_groups=num_groups),
+            VResidualBlock(base_channels * 4, base_channels * 4, num_groups=num_groups),
             # f=4
             UpScale(base_channels * 4, base_channels * 4),
-            VResidualBlock(base_channels * 4, base_channels * 4),
-            VResidualBlock(base_channels * 4, base_channels * 4),
-            VResidualBlock(base_channels * 4, base_channels * 4),
+            VResidualBlock(base_channels * 4, base_channels * 4, num_groups=num_groups),
+            VResidualBlock(base_channels * 4, base_channels * 4, num_groups=num_groups),
+            VResidualBlock(base_channels * 4, base_channels * 4, num_groups=num_groups),
             # f=2
             UpScale(base_channels * 4, base_channels * 4),
-            VResidualBlock(base_channels * 4, base_channels * 2),
-            VResidualBlock(base_channels * 2, base_channels * 2),
-            VResidualBlock(base_channels * 2, base_channels * 2),
+            VResidualBlock(base_channels * 4, base_channels * 2, num_groups=num_groups),
+            VResidualBlock(base_channels * 2, base_channels * 2, num_groups=num_groups),
+            VResidualBlock(base_channels * 2, base_channels * 2, num_groups=num_groups),
             # f=1
             UpScale(base_channels * 2, base_channels * 2),
-            VResidualBlock(base_channels * 2, base_channels),
-            VResidualBlock(base_channels, base_channels),
-            VResidualBlock(base_channels, base_channels),
+            VResidualBlock(base_channels * 2, base_channels, num_groups=num_groups),
+            VResidualBlock(base_channels, base_channels, num_groups=num_groups),
+            VResidualBlock(base_channels, base_channels, num_groups=num_groups),
             nn.GroupNorm(num_groups, base_channels),
             nn.SiLU(),
             nn.Conv2d(base_channels, 3, kernel_size=3, padding=1),
@@ -69,15 +66,23 @@ class Up(nn.Module):
 class VDecoder(nn.Module):
     def __init__(
         self,
+        image_size=64,
+        latent_dim=512,
         base_channels=128,
         num_groups=32,
-        z_scale_factor=0.18215,
+        z_scale_factor=1,
     ):
         super(VDecoder, self).__init__()
-        self.up = Up(base_channels=base_channels, num_groups=num_groups)
+        self.bottleneck = nn.Sequential(
+            nn.Linear(latent_dim, base_channels * 4 * (image_size // 8) ** 2),
+            nn.ReLU(),
+            nn.Unflatten(1, (base_channels * 4, image_size // 8, image_size // 8)),
+        )
+        self.up = Up(base_channels, num_groups)
         self.z_scale_factor = z_scale_factor
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
+        z = self.bottleneck(z)
         x = self.up(z)
         x = x / self.z_scale_factor
         return x

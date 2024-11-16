@@ -1,49 +1,57 @@
+shared_configs:
+  image_size: 256
+  latent_dim: 1024
+  base_channels: 16 # 192
+  num_groups: 8
+  z_scale_factor: 1 # 0.18215
+
 train:
   model_name: "autoencoder"
   run_name: "alpha_run_"
   checkpoint_dir: "ckpts/date={date}/dataset=ryan-sjtu-celebahq-caption/"
   precision: bf16-mixed
-  accelerator:  gpu
+  accelerator: gpu
   accumulate_grad_batches: 5
   min_wrap_params: 200_000
   max_epochs: 100
   val_check_interval: 0.25 # 0-1 indicates fraction of an epoch. >1 indicates number of batches/steps
   early_stopping_min_delta: 1e-5
-  early_stopping_patience: 5
+  early_stopping_patience: 10
   
-inference:
-  image_width: 512
-  latent_dim: 4
-  latent_width: 64
 
 model:
   target: models.autoencoder.VAutoEncoder
   params:
-    lr: 1e-3
-    beta_scale: 0.75
+    lr: 1e-5
+    min_beta: 1.0
+    max_beta: 3.0
+    kl_anneal_epochs: 10
     encoder_config:
       target: modules.autoencoder.encoder.VEncoder
       params:
-        base_channels: 192
-        num_groups: 32
-        z_scale_factor: 0.18215
+        image_size: ${shared_configs.image_size}
+        latent_dim: ${shared_configs.latent_dim}
+        base_channels: ${shared_configs.base_channels}
+        num_groups: ${shared_configs.num_groups}
+        z_scale_factor: ${shared_configs.z_scale_factor}
     decoder_config:
       target: modules.autoencoder.decoder.VDecoder
       params:
-        base_channels: 192
-        num_groups: 32
-        z_scale_factor: 0.18215
+        image_size: ${shared_configs.image_size}
+        latent_dim: ${shared_configs.latent_dim}
+        base_channels: ${shared_configs.base_channels}
+        num_groups: ${shared_configs.num_groups}
+        z_scale_factor: ${shared_configs.z_scale_factor}
 
 data:
   target: modules.data.autoencoder.AutoEncoderDataModule
   params:
     data_path: "Ryan-sjtu/celebahq-caption" 
     seed: 52    
-    batch_size: 16                 
-    image_size: 256                   
+    batch_size: 16                
+    image_size: ${shared_configs.image_size}
     num_workers: 10                   
     buffer_size: 512                
-    train_val_split: 0.05                        
+    train_val_split: 0.1                       
     preprocess_batch_fn: "preprocess_celebahq_caption"
-    collate_fn: "collate_celebahq_caption"  
-    
+    collate_fn: "collate_celebahq_caption"

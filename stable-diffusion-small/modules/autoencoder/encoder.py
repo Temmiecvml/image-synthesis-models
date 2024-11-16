@@ -19,43 +19,43 @@ class Conv2Pad(nn.Module):
 class Down(nn.Module):
     def __init__(
         self,
-        base_channels=128,
-        num_groups=32,
+        image_size,
+        latent_dim,
+        base_channels,
+        num_groups,
     ):
         super(Down, self).__init__()
 
         self.downsample = nn.Sequential(
             # f=1
             nn.Conv2d(3, base_channels, kernel_size=3, padding=1),
-            VResidualBlock(base_channels, base_channels),
-            VResidualBlock(base_channels, base_channels),
+            VResidualBlock(base_channels, base_channels, num_groups=num_groups),
+            VResidualBlock(base_channels, base_channels, num_groups=num_groups),
             # f=2
             Conv2Pad(base_channels, base_channels, kernel_size=3, stride=2, padding=0),
-            VResidualBlock(base_channels, base_channels * 2),
-            VResidualBlock(base_channels * 2, base_channels * 2),
+            VResidualBlock(base_channels, base_channels * 2, num_groups=num_groups),
+            VResidualBlock(base_channels * 2, base_channels * 2, num_groups=num_groups),
             # f=4
             Conv2Pad(
                 base_channels * 2, base_channels * 2, kernel_size=3, stride=2, padding=0
             ),
-            VResidualBlock(base_channels * 2, base_channels * 4),
-            VResidualBlock(base_channels * 4, base_channels * 4),
+            VResidualBlock(base_channels * 2, base_channels * 4, num_groups=num_groups),
+            VResidualBlock(base_channels * 4, base_channels * 4, num_groups=num_groups),
             # f=8
             Conv2Pad(
                 base_channels * 4, base_channels * 4, kernel_size=3, stride=2, padding=0
             ),
-            VResidualBlock(base_channels * 4, base_channels * 4),
-            VResidualBlock(base_channels * 4, base_channels * 4),
-            VResidualBlock(base_channels * 4, base_channels * 4),
+            VResidualBlock(base_channels * 4, base_channels * 4, num_groups=num_groups),
+            VResidualBlock(base_channels * 4, base_channels * 4, num_groups=num_groups),
+            VResidualBlock(base_channels * 4, base_channels * 4, num_groups=num_groups),
             VAttentionBlock(base_channels * 4),
-            VResidualBlock(base_channels * 4, base_channels * 4),
+            VResidualBlock(base_channels * 4, base_channels * 4, num_groups=num_groups),
             nn.GroupNorm(num_groups, base_channels * 4),
             nn.SiLU(),
             # f=8
-            nn.Conv2d(base_channels * 4, base_channels // 32, kernel_size=3, padding=1),
+            nn.Flatten(),
             # f=8
-            nn.Conv2d(
-                base_channels // 32, base_channels // 32, kernel_size=3, padding=1
-            ),
+            nn.Linear(base_channels * 4 * (image_size // 8) ** 2, latent_dim * 2),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -66,12 +66,14 @@ class Down(nn.Module):
 class VEncoder(nn.Module):
     def __init__(
         self,
+        image_size=64,
+        latent_dim=512,
         base_channels=128,
         num_groups=32,
-        z_scale_factor=0.18215,
+        z_scale_factor=1,
     ):
         super(VEncoder, self).__init__()
-        self.down = Down(base_channels=base_channels, num_groups=num_groups)
+        self.down = Down(image_size, latent_dim, base_channels, num_groups)
         self.z_scale_factor = z_scale_factor
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor = None) -> torch.Tensor:

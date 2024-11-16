@@ -7,14 +7,15 @@ import torch
 import torch.nn as nn
 from dotenv import load_dotenv
 from lightning.pytorch import seed_everything
-from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
+from lightning.pytorch.callbacks import (EarlyStopping, ModelCheckpoint,
+                                         RichProgressBar)
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.strategies import FSDPStrategy
 from modules.autoencoder.attention_block import VAttentionBlock
 from modules.autoencoder.residual_block import VResidualBlock
 from omegaconf import OmegaConf
 from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
-from utils import instantiate_object, load_checkpoint, logger
+from utils import instantiate_object, logger
 
 load_dotenv()  # set WANDB_API_KEY as env
 
@@ -51,27 +52,20 @@ def train_model(config, ckpt: str, seed: int, metric_logger):
     config.data.seed = seed
     config.model.ckpt_dir = ckpt_dir
 
-    if ckpt:
-        logger.info(f"Loading Model at: {ckpt}")
-        model = load_checkpoint(ckpt)
-
-    else:
-        logger.info(f"Instatialing Model with config at: {config}")
-        model = instantiate_object(config.model, ckpt_dir=ckpt_dir)
-
+    model = instantiate_object(config.model, ckpt_dir=ckpt_dir)
     data_module = instantiate_object(config.data)
     metric_logger.watch(model)
 
     trainer = L.Trainer(
-        strategy=get_fsdp_strategy(
-            config.train.model_name, config.train.min_wrap_params
-        ),
-        devices=torch.cuda.device_count(),
-        precision=config.train.precision,
+        # strategy=get_fsdp_strategy(
+        #     config.train.model_name, config.train.min_wrap_params
+        # ),
+        # devices=torch.cuda.device_count(),
+        # precision=config.train.precision,
         accumulate_grad_batches=config.train.accumulate_grad_batches,
         max_epochs=config.train.max_epochs,
         val_check_interval=config.train.val_check_interval,
-        accelerator=config.train.accelerator,
+        # accelerator=config.train.accelerator,
         logger=metric_logger,
         callbacks=[
             RichProgressBar(),
@@ -114,7 +108,7 @@ def parse_arguments():
         help="Path to the YAML configuration file.",
     )
 
-    parser.add_argument("--cpkt", type=str, default="", help="checkpoint path")
+    parser.add_argument("--ckpt", type=str, default="", help="checkpoint path")
 
     parser.add_argument(
         "--seed",
@@ -130,10 +124,10 @@ if __name__ == "__main__":
     args = parse_arguments()
 
     config = OmegaConf.load(args.config)
-    ckpt = args.cpkt if args.cpkt else None
+    ckpt = args.ckpt if args.ckpt else None
 
     wandb_logger = WandbLogger(
-        project=f"stable_diffusion_{config.train.model_name}",
+        project=f"local_stable_diffusion_{config.train.model_name}",
         prefix="poc",
         save_dir="logs",
     )

@@ -30,7 +30,7 @@ def log_reconstruction(
         for img, recon in zip(images, reconstructions)
     ]
     logger.log_table(
-        key=f"reconstruction/epoch-{epoch}-step-{step}", columns=columns, data=data
+        key=f"reconstruction-{epoch:03d}/step-{step:06d}", columns=columns, data=data
     )
 
 
