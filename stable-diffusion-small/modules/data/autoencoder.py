@@ -127,14 +127,20 @@ class AutoEncoderDataModule(L.LightningDataModule):
             cache_dir=self.cache_dir,
         )
 
+        dataset = self.dataset.train_test_split(
+            test_size=self.train_val_split, shuffle=True, seed=32
+        )
+
         if stage == "fit":
-            dataset = self.dataset.train_test_split(
-                test_size=self.train_val_split, shuffle=True, seed=32
-            )
             self.train_ds = PytorchHuggingFaceDataset(
                 dataset["train"], self.preprocess_batch
             )
             self.val_ds = PytorchHuggingFaceDataset(
+                dataset["test"], self.preprocess_batch
+            )
+
+        if stage == "test":
+            self.test_ds = PytorchHuggingFaceDataset(
                 dataset["test"], self.preprocess_batch
             )
 
@@ -149,6 +155,14 @@ class AutoEncoderDataModule(L.LightningDataModule):
     def val_dataloader(self):
         return DataLoader(
             dataset=self.val_ds,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            persistent_workers=self.num_workers > 0,
+        )
+
+    def test_dataloader(self):
+        return DataLoader(
+            dataset=self.test_ds,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             persistent_workers=self.num_workers > 0,

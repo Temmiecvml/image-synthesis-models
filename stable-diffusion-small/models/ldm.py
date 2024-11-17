@@ -63,8 +63,11 @@ class LDM(L.LightningModule):
             return
 
         self.unet = instantiate_object(self.unet_config)
+
+        clip_dtype = self.get_text_conditoner_dtype(self.precisio)
+
         self.text_conditioner = instantiate_object(
-            self.text_conditioner_config, device=str(self.device)
+            self.text_conditioner_config, device=str(self.device), clip_dtype=clip_dtype
         )
         self.first_stage_encoder = load_first_stage_encoder(
             self.first_stage_encoder_config, self.first_stage_encoder_ckpt
@@ -115,6 +118,25 @@ class LDM(L.LightningModule):
             logger.info(f"{component} is already active.")
             setattr(self, f"{component}_idle", False)
             return
+
+    def get_text_conditoner_dtype(self, precision):
+        """
+        Maps PyTorch Lightning precision settings to PyTorch dtype.
+
+        Args:
+            precision (str or int): The precision setting, e.g., "bf16-mixed", 16, 32.
+
+        Returns:
+            torch.dtype: Corresponding PyTorch dtype.
+        """
+        precision_map = {
+            "bf16-mixed": torch.bfloat16,
+            "bf16": torch.bfloat16,
+            16: torch.float16,
+            "16-mixed": torch.float16,
+            32: torch.float32,
+        }
+        return precision_map.get(precision, torch.float32)
 
     def create_schedule(self, beta_schedule, num_timesteps):
         betas = make_beta_schedule(
