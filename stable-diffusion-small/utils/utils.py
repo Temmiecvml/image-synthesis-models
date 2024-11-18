@@ -140,8 +140,8 @@ def load_first_stage_encoder(config, ckpt_path):
         for k, v in checkpoint["state_dict"].items()
         if k.startswith("encoder.")
     }
-
-    encoder = instantiate_object(config)
+    config = OmegaConf.load(config)
+    encoder = instantiate_object(config.model.params.encoder_config)
     encoder = encoder.load_state_dict(encoder_weights)
 
     return encoder

@@ -23,12 +23,14 @@ class LDM(L.LightningModule):
         text_conditioner_config,
         first_stage_encoder_config,
         first_stage_encoder_ckpt,
+        lr,
         beta_schedule,
         num_timesteps,
         loss_type,
         v_posterior,  # weight for choosing posterior variance as sigma = (1-v) * beta_tilde + v * beta
         l_simple_weight,
         elbo_weight,
+        ckpt_dir,
     ):
         super().__init__()
 
@@ -36,6 +38,7 @@ class LDM(L.LightningModule):
         self.text_conditioner_config = text_conditioner_config
         self.first_stage_encoder_config = first_stage_encoder_config
         self.first_stage_encoder_ckpt = first_stage_encoder_ckpt
+        self.lr = lr
 
         self.unet = None
         self.text_conditioner = None
@@ -48,6 +51,8 @@ class LDM(L.LightningModule):
         self.v_posterior = v_posterior
         self.l_simple_weight = l_simple_weight
         self.elbo_weight = elbo_weight
+
+        self.ckpt_dir = ckpt_dir
 
         self.logvar = torch.nn.Parameter(
             torch.full((num_timesteps,), 0.0), requires_grad=True
@@ -64,10 +69,9 @@ class LDM(L.LightningModule):
 
         self.unet = instantiate_object(self.unet_config)
 
-        clip_dtype = self.get_text_conditoner_dtype(self.precisio)
-
         self.text_conditioner = instantiate_object(
-            self.text_conditioner_config, device=str(self.device), clip_dtype=clip_dtype
+            self.text_conditioner_config,
+            device=str(self.device),
         )
         self.first_stage_encoder = load_first_stage_encoder(
             self.first_stage_encoder_config, self.first_stage_encoder_ckpt
@@ -118,25 +122,6 @@ class LDM(L.LightningModule):
             logger.info(f"{component} is already active.")
             setattr(self, f"{component}_idle", False)
             return
-
-    def get_text_conditoner_dtype(self, precision):
-        """
-        Maps PyTorch Lightning precision settings to PyTorch dtype.
-
-        Args:
-            precision (str or int): The precision setting, e.g., "bf16-mixed", 16, 32.
-
-        Returns:
-            torch.dtype: Corresponding PyTorch dtype.
-        """
-        precision_map = {
-            "bf16-mixed": torch.bfloat16,
-            "bf16": torch.bfloat16,
-            16: torch.float16,
-            "16-mixed": torch.float16,
-            32: torch.float32,
-        }
-        return precision_map.get(precision, torch.float32)
 
     def create_schedule(self, beta_schedule, num_timesteps):
         betas = make_beta_schedule(
@@ -235,7 +220,7 @@ class LDM(L.LightningModule):
         if isinstance(context, np.ndarray):
             context = list(context)
 
-        context = self.get_context_embedding(context)
+        context = self.get_context_embedding(context).to(x_noisy.dtype)
         t_embeddings = self.get_timestep_embedding(t)
         noise = self.unet(x_noisy, context, t_embeddings)
 
@@ -315,3 +300,20 @@ class LDM(L.LightningModule):
         self.log("train_loss", loss)
 
         return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=1e-5)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer,
+            T_0=10,  # Number of epochs for the first restart
+            T_mult=2,  # Multiplier for the number of epochs between restarts
+            eta_min=1e-6,  # Minimum learning rate
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "epoch",
+                "frequency": 1,
+            },
+        }

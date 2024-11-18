@@ -29,26 +29,18 @@ class TextConditioner(nn.Module):
         out_dims,
         num_heads,
         device,
-        clip_dtype,
         clip_model="ViT-B/32",
     ):
         super(TextConditioner, self).__init__()
 
-        self.load_clip(clip_model, device, clip_dtype)
+        self.load_clip(clip_model, device)
 
         self.norm = nn.LayerNorm(dims)
         self.attn = nn.MultiheadAttention(dims, num_heads, batch_first=True)
         self.projection = nn.Linear(dims, out_dims)
 
-    def load_clip(self, clip_model, device, clip_dtype):
-        clip = CLIPModel(clip_model, device)
-
-        for param in clip.parameters():
-            param.data = param.data.to(clip_dtype)
-        for buffer in clip.buffers():
-            buffer.data = buffer.data.to(clip_dtype)
-
-        self.clip = clip
+    def load_clip(self, clip_model, device):
+        self.clip = CLIPModel(clip_model, device)
 
     def forward(self, query):
         with torch.no_grad():

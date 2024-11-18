@@ -54,23 +54,23 @@ class VAutoEncoder(L.LightningModule):
         x, _ = batch
         recon_x, mu, logvar = self(x)
         mse, kld, beta = self.loss_function(recon_x, x, mu, logvar)
-        loss = (mse + beta * kld).mean()
+        loss = mse + beta * kld
 
-        self.log("mse", mse, batch_size=x.size[0])
-        self.log("kld", kld, batch_size=x.size[0])
-        self.log("beta", beta, batch_size=x.size[0])
-        self.log("train_loss", loss, batch_size=x.size[0])
+        self.log("mse", mse)
+        self.log("kld", kld)
+        self.log("beta", beta)
+        self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, _ = batch
         recon_x, mu, logvar = self(x)
         mse, kld, beta = self.loss_function(recon_x, x, mu, logvar)
-        loss = (mse + beta * kld).mean()
-        self.log("mse", mse, batch_size=x.size[0])
-        self.log("kld", kld, batch_size=x.size[0])
-        self.log("beta", beta, batch_size=x.size[0])
-        self.log("val_loss", loss, batch_size=x.size[0])
+        loss = mse + beta * kld
+        self.log("mse", mse)
+        self.log("kld", kld)
+        self.log("beta", beta)
+        self.log("val_loss", loss)
 
         if batch_idx == 0:
             log_reconstruction(
@@ -87,11 +87,11 @@ class VAutoEncoder(L.LightningModule):
         )
 
     def loss_function(self, recon_x, x, mu, logvar):
-        MSE = F.mse_loss(recon_x, x, reduction="sum")
-        MSE = MSE / recon_x.size(0)
-
-        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        KLD = KLD / recon_x.size(0)
+        MSE = F.mse_loss(recon_x, x, reduction="mean")
+        # (batch_dim, feature_dim)
+        KLD = torch.mean(
+            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1), dim=0
+        )
 
         beta = self.get_kl_weight()
 
