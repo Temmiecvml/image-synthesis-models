@@ -1,12 +1,11 @@
 shared_configs:
-  base_dims: 192
+  base_dims: 16
   image_size: 256
 
 train:
   model_name: "ldm"
-  checkpoint_dir: "ckpts/date={date}/dataset=ryan-sjtu-celebahq-caption/"
+  checkpoint_dir: "ckpts/model={model_name}/dataset={data_name}/run={run_name}/date={date}/"
   precision: bf16-mixed
-  accelerator: gpu
   accumulate_grad_batches: 5
   min_wrap_params: 200_000
   max_epochs: 100
@@ -24,11 +23,10 @@ model:
         base_context_dims: 640
         time_embedding_dims: 768
         num_heads: 6
-        in_dims: 4
-        out_dims: 4
-        groups: 32
+        in_dims: 64
+        out_dims: 3
+        groups: 8
        
-
     timestep_config:
       target: modules.diffusion.ldm.TimeEmbedding
       params:
@@ -43,8 +41,7 @@ model:
         clip_model: ViT-B/32
     
     lr : 1e-5
-    first_stage_encoder_config: "hyperparameters/autoencoder/config.yaml"
-    first_stage_encoder_ckpt: "ckpts/date=2024-11-16T07-16-53/dataset=ryan-sjtu-celebahq-caption/autoencoder-epoch=16-val_loss=9271.40.ckpt"
+    first_stage_encoder_ckpt: "ckpts/model=autoencoder/dataset=ryan-sjtu_celebahq-caption/run=solar-darkness-55/date=2024-11-19T13-18-30/autoencoder-epoch=00-val_loss=0.05.ckpt"
     beta_schedule: linear
     num_timesteps: 1000
     loss_type: l2

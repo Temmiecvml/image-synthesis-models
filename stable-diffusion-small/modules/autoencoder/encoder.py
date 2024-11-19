@@ -74,6 +74,11 @@ class VEncoder(nn.Module):
     ):
         super(VEncoder, self).__init__()
         self.down = Down(image_size, latent_dim, base_channels, num_groups)
+        self.bottleneck = nn.Sequential(
+            nn.Linear(latent_dim, base_channels * 4 * (image_size // 8) ** 2),
+            nn.ReLU(),
+            nn.Unflatten(1, (base_channels * 4, image_size // 8, image_size // 8)),
+        )
         self.z_scale_factor = z_scale_factor
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor = None) -> torch.Tensor:
@@ -87,5 +92,6 @@ class VEncoder(nn.Module):
 
         z = mean + std * noise
         z = z * self.z_scale_factor
+        z = self.bottleneck(z)
 
         return z, mean, log_var

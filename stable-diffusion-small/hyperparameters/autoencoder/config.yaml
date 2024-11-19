@@ -7,9 +7,8 @@ shared_configs:
 
 train:
   model_name: "autoencoder"
-  checkpoint_dir: "ckpts/date={date}/dataset=ryan-sjtu-celebahq-caption/"
+  checkpoint_dir: "ckpts/model={model_name}/dataset={data_name}/run={run_name}/date={date}/"
   precision: bf16-mixed
-  accelerator: gpu
   accumulate_grad_batches: 5
   min_wrap_params: 200_000
   max_epochs: 100
@@ -20,9 +19,9 @@ train:
 model:
   target: models.autoencoder.VAutoEncoder
   params:
-    lr: 1e-5
-    min_beta: 1.0
-    max_beta: 5.0
+    lr: 1e-4
+    min_beta: 0
+    max_beta: 0.1
     kl_anneal_epochs: 10
     encoder_config:
       target: modules.autoencoder.encoder.VEncoder
@@ -35,8 +34,6 @@ model:
     decoder_config:
       target: modules.autoencoder.decoder.VDecoder
       params:
-        image_size: ${shared_configs.image_size}
-        latent_dim: ${shared_configs.latent_dim}
         base_channels: ${shared_configs.base_channels}
         num_groups: ${shared_configs.num_groups}
         z_scale_factor: ${shared_configs.z_scale_factor}

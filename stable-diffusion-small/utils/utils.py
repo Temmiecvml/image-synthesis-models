@@ -5,8 +5,6 @@ from typing import Optional
 
 import torch
 import wandb
-from lightning.pytorch.callbacks import Callback
-from omegaconf import OmegaConf
 from PIL import Image
 from torchvision import transforms
 
@@ -133,18 +131,18 @@ def load_checkpoint(config, checkpoint_path: str):
     return model
 
 
-def load_first_stage_encoder(config, ckpt_path):
+def load_first_stage_component(ckpt_path: str, component: str = "encoder"):
     checkpoint = torch.load(ckpt_path)
-    encoder_weights = {
-        k.replace("encoder.", ""): v
+    component_weights = {
+        k.removeprefix(f"{component}."): v
         for k, v in checkpoint["state_dict"].items()
-        if k.startswith("encoder.")
+        if k.startswith(f"{component}.")
     }
-    config = OmegaConf.load(config)
-    encoder = instantiate_object(config.model.params.encoder_config)
-    encoder = encoder.load_state_dict(encoder_weights)
+    config = checkpoint["hyper_parameters"][f"{component}_config"]
+    comp = instantiate_object(config)
+    comp.load_state_dict(component_weights)
 
-    return encoder
+    return comp
 
 
 def save_checkpoint(trainer, checkpoint_dir: str):

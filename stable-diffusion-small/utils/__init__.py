@@ -8,7 +8,7 @@ from .utils import (
     extract_into_tensor,
     instantiate_object,
     load_checkpoint,
-    load_first_stage_encoder,
+    load_first_stage_component,
     load_images_to_tensor,
     log_reconstruction,
     save_checkpoint,

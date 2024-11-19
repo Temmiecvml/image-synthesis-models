@@ -66,23 +66,15 @@ class Up(nn.Module):
 class VDecoder(nn.Module):
     def __init__(
         self,
-        image_size=64,
-        latent_dim=512,
         base_channels=128,
         num_groups=32,
         z_scale_factor=1,
     ):
         super(VDecoder, self).__init__()
-        self.bottleneck = nn.Sequential(
-            nn.Linear(latent_dim, base_channels * 4 * (image_size // 8) ** 2),
-            nn.ReLU(),
-            nn.Unflatten(1, (base_channels * 4, image_size // 8, image_size // 8)),
-        )
         self.up = Up(base_channels, num_groups)
         self.z_scale_factor = z_scale_factor
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
-        z = self.bottleneck(z)
         x = self.up(z)
         x = x / self.z_scale_factor
         return x

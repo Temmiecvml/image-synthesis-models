@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from utils import (
     extract_into_tensor,
     instantiate_object,
-    load_first_stage_encoder,
+    load_first_stage_component,
     logger,
     make_beta_schedule,
     timestep_embedding,
@@ -21,7 +21,6 @@ class LDM(L.LightningModule):
         unet_config,
         timestep_config,
         text_conditioner_config,
-        first_stage_encoder_config,
         first_stage_encoder_ckpt,
         lr,
         beta_schedule,
@@ -36,7 +35,6 @@ class LDM(L.LightningModule):
 
         self.unet_config = unet_config
         self.text_conditioner_config = text_conditioner_config
-        self.first_stage_encoder_config = first_stage_encoder_config
         self.first_stage_encoder_ckpt = first_stage_encoder_ckpt
         self.lr = lr
 
@@ -69,27 +67,19 @@ class LDM(L.LightningModule):
 
         self.unet = instantiate_object(self.unet_config)
 
-        self.text_conditioner = instantiate_object(
-            self.text_conditioner_config,
-            device=str(self.device),
+        self.text_conditioner = (
+            instantiate_object(
+                self.text_conditioner_config,
+                device=str(self.device),
+            )
+            .requires_grad_(False)
+            .eval()
         )
-        self.first_stage_encoder = load_first_stage_encoder(
-            self.first_stage_encoder_config, self.first_stage_encoder_ckpt
+        self.first_stage_encoder = (
+            load_first_stage_component(self.first_stage_encoder_ckpt)
+            .requires_grad_(False)
+            .eval()
         )
-
-    def freeze_first_stage_encoder(self):
-        for param in self.first_stage_encoder.parameters():
-            param.requires_grad = False
-
-        for module in self.first_stage_encoder.modules():
-            if isinstance(module, torch.nn.BatchNorm2d) or isinstance(
-                module, torch.nn.BatchNorm1d
-            ):
-                module.eval()
-            if isinstance(module, torch.nn.Dropout) or isinstance(
-                module, torch.nn.Dropout2d
-            ):
-                module.eval()
 
     def idle_component(self, component: str, idle: bool = True):
         def is_on_cpu(comp):
@@ -171,10 +161,10 @@ class LDM(L.LightningModule):
             for a max sequence length of 77, and output dims of 640
             we get an output shape of (batch_size, 77, 640)å
         """
-        if not self.text_conditioner_idle:
+
+        with torch.no_grad():
             context = self.text_conditioner(context)
-        else:
-            raise ValueError("Text conditioner is idle")
+       
 
         return context
 
@@ -288,14 +278,17 @@ class LDM(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, context = batch
-        noise = torch.randn_like(x, device=self.device)
+       
         t = torch.randint(
             0, self.num_timesteps, (x.shape[0],), device=self.device
         ).long()
 
         # Forward pass through the model
-        x_start = self.first_stage_encoder(x)
-        loss = self.compute_loss(x_start, context, noise, t, prefix="train")
+        with torch.no_grad():
+            x_start, _, _ = self.first_stage_encoder(x)
+            noise = torch.randn_like(x_start, device=self.device)
+
+        loss = self.compute_loss(x_start, context, noise, t)
 
         self.log("train_loss", loss)
 

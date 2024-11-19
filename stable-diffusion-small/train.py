@@ -20,6 +20,13 @@ load_dotenv()  # set WANDB_API_KEY as env
 
 torch.set_float32_matmul_precision("medium")
 
+def get_available_device():
+    if torch.cuda.is_available():
+        return 'cuda'
+    elif torch.backends.mps.is_available():
+        return 'mps'
+    else:
+        return 'cpu'
 
 def get_fsdp_strategy(
     model_name,
@@ -43,28 +50,45 @@ def get_fsdp_strategy(
     )
 
 
-def train_model(config, ckpt: str, seed: int, metric_logger):
-
+def get_ckpt_dir(config, run_name: str):
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    ckpt_dir = config.train.checkpoint_dir.replace("{date}", now)
+    _ckpt_dir = config.train.checkpoint_dir.replace("{date}", now)
+    _ckpt_dir = _ckpt_dir.replace("{run_name}", run_name)
+    _ckpt_dir = _ckpt_dir.replace(
+        "{data_name}", config.data.params.data_path.lower().replace("/", "_")
+    )
+    _ckpt_dir = _ckpt_dir.replace("{model_name}", config.train.model_name.lower())
+    return _ckpt_dir
 
+
+def train_model(config, ckpt: str, seed: int, metric_logger):
+   
     config.data.seed = seed
-    config.model.ckpt_dir = ckpt_dir
+    config.train.accelerator = get_available_device()
+    ckpt_dir = get_ckpt_dir(config, metric_logger.experiment.name)
 
     model = instantiate_object(config.model, ckpt_dir=ckpt_dir)
     data_module = instantiate_object(config.data)
     metric_logger.watch(model)
 
     trainer = L.Trainer(
-        # strategy=get_fsdp_strategy(
-        #     config.train.model_name, config.train.min_wrap_params
-        # ),
-        # devices=torch.cuda.device_count(),
-        # precision=config.train.precision,
+        strategy=(
+            "auto"
+            if config.train.accelerator == "mps"
+            else get_fsdp_strategy(
+                config.train.model_name, config.train.min_wrap_params
+            )
+        ),
+        devices=(
+            "auto" if config.train.accelerator == "mps" else torch.cuda.device_count()
+        ),
+        precision=(
+            "32-true" if config.train.accelerator == "mps" else config.train.precision
+        ),
         accumulate_grad_batches=config.train.accumulate_grad_batches,
         max_epochs=config.train.max_epochs,
         val_check_interval=config.train.val_check_interval,
-        # accelerator=config.train.accelerator,
+        accelerator=config.train.accelerator,
         logger=metric_logger,
         callbacks=[
             RichProgressBar(),
@@ -121,32 +145,33 @@ def parse_arguments():
 
 if __name__ == "__main__":
     args = parse_arguments()
-
     config = OmegaConf.load(args.config)
-    ckpt = args.ckpt if args.ckpt else None
+
+    if args.ckpt:
+        ckpt = args.ckpt
+        kwargs = {
+            "id": next(
+                run_part.split("=")[1]
+                for run_part in ckpt.split("/")
+                if run_part.startswith("run=")
+            ),
+            "resume": "must",
+        }
+    else:
+        ckpt = None
+        kwargs = {}
 
     wandb_logger = WandbLogger(
-        project=f"local_stable_diffusion_{config.train.model_name}",
+        project=f"poc_local_stable_diffusion_{config.train.model_name}",
         prefix="poc",
         save_dir="logs",
+        **kwargs,
     )
 
     seed_everything(args.seed)
 
     try:
         train_model(config, ckpt, args.seed, wandb_logger)
-
-        # import torch
-
-        # sample_input = torch.randn(2, 3, 512, 512)
-        # c = ["I am a demo", "I am a cat", ""]
-        # model = instantiate_object(config.model)
-        # recon_x, mean, log_var = model(sample_input)
-
-        # print("Model output shape: ", recon_x.shape)
-
-        # diffusion_model = instantiate_object(config.ddpm)
-        # o = diffusion_model(sample_input, c)
 
     except Exception as e:
         logger.error(e)

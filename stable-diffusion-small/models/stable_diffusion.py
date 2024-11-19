@@ -7,7 +7,7 @@ from omegaconf import OmegaConf
 from tqdm import tqdm
 from utils import (
     extract_into_tensor,
-    load_first_stage_encoder,
+    load_first_stage_component,
     load_images_to_tensor,
     logger,
     make_beta_schedule,
@@ -45,8 +45,8 @@ def process_image_paths(
 
 
 def load_models(config):
-    autoencoder_model = load_first_stage_encoder(config.autoencoder)
-    ddpm_model = load_first_stage_encoder(config.ddpm)
+    autoencoder_model = load_first_stage_component(config.autoencoder)
+    ddpm_model = load_first_stage_component(config.ddpm)
 
     return {"autoencoder": autoencoder_model, "ddpm": ddpm_model}
 
