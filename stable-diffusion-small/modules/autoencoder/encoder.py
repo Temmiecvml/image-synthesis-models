@@ -19,12 +19,12 @@ class Conv2Pad(nn.Module):
 class Down(nn.Module):
     def __init__(
         self,
-        image_size,
-        latent_dim,
         base_channels,
         num_groups,
     ):
         super(Down, self).__init__()
+
+        latent_channels = base_channels // 32 if base_channels > 32 else base_channels
 
         self.downsample = nn.Sequential(
             # f=1
@@ -53,9 +53,8 @@ class Down(nn.Module):
             nn.GroupNorm(num_groups, base_channels * 4),
             nn.SiLU(),
             # f=8
-            nn.Flatten(),
+            nn.Conv2d(base_channels * 4, base_channels * 4, kernel_size=3, padding=1),
             # f=8
-            nn.Linear(base_channels * 4 * (image_size // 8) ** 2, latent_dim * 2),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -66,23 +65,19 @@ class Down(nn.Module):
 class VEncoder(nn.Module):
     def __init__(
         self,
-        image_size=64,
-        latent_dim=512,
+        z_dims,
         base_channels=128,
         num_groups=32,
         z_scale_factor=1,
     ):
         super(VEncoder, self).__init__()
-        self.down = Down(image_size, latent_dim, base_channels, num_groups)
-        self.bottleneck = nn.Sequential(
-            nn.Linear(latent_dim, base_channels * 4 * (image_size // 8) ** 2),
-            nn.ReLU(),
-            nn.Unflatten(1, (base_channels * 4, image_size // 8, image_size // 8)),
-        )
+        self.down = Down(base_channels, num_groups)
+        self.quant_conv = torch.nn.Conv2d(base_channels * 4, 2 * z_dims, 1)
         self.z_scale_factor = z_scale_factor
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor = None) -> torch.Tensor:
         x = self.down(x)
+        x = self.quant_conv(x)
         mean, log_var = torch.chunk(x, 2, dim=1)
         log_var = torch.clamp(log_var, -20, 20)
         std = log_var.exp().sqrt()
@@ -92,6 +87,5 @@ class VEncoder(nn.Module):
 
         z = mean + std * noise
         z = z * self.z_scale_factor
-        z = self.bottleneck(z)
 
         return z, mean, log_var

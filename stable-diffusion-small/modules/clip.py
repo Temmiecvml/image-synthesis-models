@@ -6,12 +6,12 @@ from clip import clip
 class CLIPModel(nn.Module):
     def __init__(self, clip_text_model, device):
         super(CLIPModel, self).__init__()
-        self.model, _ = clip.load(clip_text_model, device)
+        self.model, _ = clip.load(clip_text_model, device="cpu")
 
     def forward(self, text):
         device = self.get_device()
         query = [text] if not hasattr(text, "__iter__") else text
-        query_tokens = torch.vstack([clip.tokenize([q]) for q in query]).to(device)
+        query_tokens = torch.vstack([clip.tokenize([q]) for q in query]).to("cpu")
         with torch.no_grad():
             query = self.model.encode_text(query_tokens, embeddings=True)
 

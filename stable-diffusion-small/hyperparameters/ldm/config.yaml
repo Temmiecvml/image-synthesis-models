@@ -1,6 +1,8 @@
 shared_configs:
   base_dims: 16
   image_size: 256
+  time_embedding_dims: 768
+  context_dims: 640
 
 train:
   model_name: "ldm"
@@ -20,28 +22,28 @@ model:
       target: modules.diffusion.ldm.UNet
       params:
         base_dims: ${shared_configs.base_dims}
-        base_context_dims: 640
-        time_embedding_dims: 768
+        base_context_dims: ${shared_configs.context_dims}
+        time_embedding_dims: ${shared_configs.time_embedding_dims}
         num_heads: 6
-        in_dims: 64
+        in_dims: 16
         out_dims: 3
         groups: 8
        
     timestep_config:
       target: modules.diffusion.ldm.TimeEmbedding
       params:
-        dims: ${shared_configs.base_dims}
+        dims: ${shared_configs.time_embedding_dims}
 
     text_conditioner_config:
       target: modules.clip.TextConditioner
       params:
         dims: 512
-        out_dims: 640
+        out_dims: ${shared_configs.context_dims}
         num_heads: 8
         clip_model: ViT-B/32
     
     lr : 1e-5
-    first_stage_encoder_ckpt: "ckpts/model=autoencoder/dataset=ryan-sjtu_celebahq-caption/run=solar-darkness-55/date=2024-11-19T13-18-30/autoencoder-epoch=00-val_loss=0.05.ckpt"
+    first_stage_encoder_ckpt: "ckpts/model=autoencoder/dataset=ryan-sjtu_celebahq-caption/run=resilient-planet-5/date=2024-11-19T14-57-10/autoencoder-epoch=00-val_loss=1.46.ckpt"
     beta_schedule: linear
     num_timesteps: 1000
     loss_type: l2

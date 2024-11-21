@@ -30,6 +30,8 @@ class Up(nn.Module):
     ):
         super(Up, self).__init__()
 
+        latent_channels = base_channels // 32 if base_channels > 32 else base_channels
+
         self.upsample = nn.Sequential(
             # f=8 , we divide by 2 again because the latents were divided by 2
             nn.Conv2d(base_channels * 4, base_channels * 4, kernel_size=3, padding=1),
@@ -55,7 +57,6 @@ class Up(nn.Module):
             VResidualBlock(base_channels, base_channels, num_groups=num_groups),
             nn.GroupNorm(num_groups, base_channels),
             nn.SiLU(),
-            nn.Conv2d(base_channels, 3, kernel_size=3, padding=1),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -66,15 +67,20 @@ class Up(nn.Module):
 class VDecoder(nn.Module):
     def __init__(
         self,
+        z_dims,
         base_channels=128,
         num_groups=32,
         z_scale_factor=1,
     ):
         super(VDecoder, self).__init__()
         self.up = Up(base_channels, num_groups)
+        self.post_quant_conv = torch.nn.Conv2d(z_dims, base_channels * 4, 1)
+        self.conv_out = nn.Conv2d(base_channels, 3, kernel_size=3, padding=1)
         self.z_scale_factor = z_scale_factor
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
-        x = self.up(z)
+        x = self.post_quant_conv(z)
+        x = self.up(x)
+        x = self.conv_out(x)
         x = x / self.z_scale_factor
         return x

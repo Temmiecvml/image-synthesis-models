@@ -164,7 +164,6 @@ class LDM(L.LightningModule):
 
         with torch.no_grad():
             context = self.text_conditioner(context)
-       
 
         return context
 
@@ -278,7 +277,7 @@ class LDM(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, context = batch
-       
+
         t = torch.randint(
             0, self.num_timesteps, (x.shape[0],), device=self.device
         ).long()
@@ -296,12 +295,7 @@ class LDM(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=1e-5)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            optimizer,
-            T_0=10,  # Number of epochs for the first restart
-            T_mult=2,  # Multiplier for the number of epochs between restarts
-            eta_min=1e-6,  # Minimum learning rate
-        )
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.9)
         return {
             "optimizer": optimizer,
             "lr_scheduler": {

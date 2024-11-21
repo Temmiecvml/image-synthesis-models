@@ -241,17 +241,23 @@ class UNet(nn.Module):
                     nn.Conv2d(in_dims, base_dims, kernel_size=3, padding=1)
                 ),  # hs[1]
                 SwitchSequential(
-                    UNetResidualBlock(base_dims, base_dims, time_embedding_dims, groups=groups),
+                    UNetResidualBlock(
+                        base_dims, base_dims, time_embedding_dims, groups=groups
+                    ),
                 ),  # hs[2]
                 SwitchSequential(
-                    UNetResidualBlock(base_dims, base_dims, time_embedding_dims, groups=groups),
+                    UNetResidualBlock(
+                        base_dims, base_dims, time_embedding_dims, groups=groups
+                    ),
                 ),  # hs[3]
                 SwitchSequential(
                     nn.Conv2d(base_dims, base_dims, kernel_size=3, stride=2, padding=1),
                 ),
                 # f=16, hs[4]
                 SwitchSequential(
-                    UNetResidualBlock(base_dims, base_dims * 2, time_embedding_dims, groups=groups),
+                    UNetResidualBlock(
+                        base_dims, base_dims * 2, time_embedding_dims, groups=groups
+                    ),
                     UNetCrossAttentionBlock(
                         base_dims * 2, num_heads, base_context_dims, groups=groups
                     ),
@@ -266,7 +272,12 @@ class UNet(nn.Module):
                 ),  # hs[6]
                 SwitchSequential(
                     nn.Conv2d(
-                        base_dims * 2, base_dims * 2, kernel_size=3, stride=2, padding=1, groups=groups
+                        base_dims * 2,
+                        base_dims * 2,
+                        kernel_size=3,
+                        stride=2,
+                        padding=1,
+                        groups=groups,
                     ),
                 ),
                 # f=32, hs[7]
@@ -288,7 +299,12 @@ class UNet(nn.Module):
                 ),  # hs[9]
                 SwitchSequential(
                     nn.Conv2d(
-                        base_dims * 3, base_dims * 3, kernel_size=3, stride=2, padding=1, groups=groups
+                        base_dims * 3,
+                        base_dims * 3,
+                        kernel_size=3,
+                        stride=2,
+                        padding=1,
+                        groups=groups,
                     ),
                 ),
                 # f=64, hs[10]
@@ -314,13 +330,19 @@ class UNet(nn.Module):
         self.bottle_neck = nn.ModuleList(
             [
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 5, base_dims * 5, time_embedding_dims, groups=groups)
+                    UNetResidualBlock(
+                        base_dims * 5, base_dims * 5, time_embedding_dims, groups=groups
+                    )
                 ),
                 SwitchSequential(
-                    UNetCrossAttentionBlock(base_dims * 5, num_heads, base_context_dims, groups=groups)
+                    UNetCrossAttentionBlock(
+                        base_dims * 5, num_heads, base_context_dims, groups=groups
+                    )
                 ),
                 SwitchSequential(
-                    UNetResidualBlock(base_dims * 5, base_dims * 5, time_embedding_dims, groups=groups)
+                    UNetResidualBlock(
+                        base_dims * 5, base_dims * 5, time_embedding_dims, groups=groups
+                    )
                 ),
             ]
         )
@@ -330,7 +352,10 @@ class UNet(nn.Module):
             [  # f=64
                 SwitchSequential(  # 3 -> 192
                     UNetResidualBlock(  # + hs[11]
-                        base_dims * 5 * 2, base_dims * 5, time_embedding_dims, groups=groups
+                        base_dims * 5 * 2,
+                        base_dims * 5,
+                        time_embedding_dims,
+                        groups=groups,
                     ),
                     UNetCrossAttentionBlock(
                         base_dims * 5, num_heads, base_context_dims, groups=groups
@@ -338,7 +363,10 @@ class UNet(nn.Module):
                 ),
                 SwitchSequential(
                     UNetResidualBlock(  # + hs[10]
-                        base_dims * 5 * 2, base_dims * 5, time_embedding_dims, groups=groups
+                        base_dims * 5 * 2,
+                        base_dims * 5,
+                        time_embedding_dims,
+                        groups=groups,
                     ),
                     UNetCrossAttentionBlock(
                         base_dims * 5, num_heads, base_context_dims, groups=groups
@@ -346,7 +374,10 @@ class UNet(nn.Module):
                 ),
                 SwitchSequential(
                     UNetResidualBlock(  # + hs[9]
-                        base_dims * (5 + 3), base_dims * 5, time_embedding_dims, groups=groups
+                        base_dims * (5 + 3),
+                        base_dims * 5,
+                        time_embedding_dims,
+                        groups=groups,
                     ),
                     UNetCrossAttentionBlock(
                         base_dims * 5, num_heads, base_context_dims, groups=groups
@@ -356,7 +387,10 @@ class UNet(nn.Module):
                 # f=32
                 SwitchSequential(
                     UNetResidualBlock(  # + hs[8]
-                        base_dims * (5 + 3), base_dims * 3, time_embedding_dims, groups=groups
+                        base_dims * (5 + 3),
+                        base_dims * 3,
+                        time_embedding_dims,
+                        groups=groups,
                     ),
                     UNetCrossAttentionBlock(
                         base_dims * 3, num_heads, base_context_dims, groups=groups
@@ -364,7 +398,10 @@ class UNet(nn.Module):
                 ),
                 SwitchSequential(
                     UNetResidualBlock(  # + hs[7]
-                        base_dims * (3 + 3), base_dims * 3, time_embedding_dims, groups=groups
+                        base_dims * (3 + 3),
+                        base_dims * 3,
+                        time_embedding_dims,
+                        groups=groups,
                     ),
                     UNetCrossAttentionBlock(
                         base_dims * 3, num_heads, base_context_dims, groups=groups
@@ -372,7 +409,10 @@ class UNet(nn.Module):
                 ),
                 SwitchSequential(
                     UNetResidualBlock(  # + hs[6]
-                        base_dims * (3 + 2), base_dims * 3, time_embedding_dims, groups=groups
+                        base_dims * (3 + 2),
+                        base_dims * 3,
+                        time_embedding_dims,
+                        groups=groups,
                     ),
                     UNetCrossAttentionBlock(
                         base_dims * 3, num_heads, base_context_dims, groups=groups
@@ -382,7 +422,10 @@ class UNet(nn.Module):
                 # f=16
                 SwitchSequential(
                     UNetResidualBlock(  # + hs[5]
-                        base_dims * (3 + 2), base_dims * 2, time_embedding_dims, groups=groups
+                        base_dims * (3 + 2),
+                        base_dims * 2,
+                        time_embedding_dims,
+                        groups=groups,
                     ),
                     UNetCrossAttentionBlock(
                         base_dims * 2, num_heads, base_context_dims, groups=groups
@@ -390,7 +433,10 @@ class UNet(nn.Module):
                 ),
                 SwitchSequential(
                     UNetResidualBlock(  # + hs[4]
-                        base_dims * (2 + 2), base_dims * 2, time_embedding_dims, groups=groups
+                        base_dims * (2 + 2),
+                        base_dims * 2,
+                        time_embedding_dims,
+                        groups=groups,
                     ),
                     UNetCrossAttentionBlock(
                         base_dims * 2, num_heads, base_context_dims, groups=groups
@@ -398,7 +444,10 @@ class UNet(nn.Module):
                 ),
                 SwitchSequential(
                     UNetResidualBlock(  # + hs[3]
-                        base_dims * (2 + 1), base_dims * 2, time_embedding_dims, groups=groups
+                        base_dims * (2 + 1),
+                        base_dims * 2,
+                        time_embedding_dims,
+                        groups=groups,
                     ),
                     UNetCrossAttentionBlock(
                         base_dims * 2, num_heads, base_context_dims, groups=groups
@@ -408,17 +457,26 @@ class UNet(nn.Module):
                 # f=8
                 SwitchSequential(
                     UNetResidualBlock(  # + hs[2]
-                        base_dims * (2 + 1), base_dims, time_embedding_dims, groups=groups
+                        base_dims * (2 + 1),
+                        base_dims,
+                        time_embedding_dims,
+                        groups=groups,
                     ),
                 ),
                 SwitchSequential(
                     UNetResidualBlock(  # + hs[1]
-                        base_dims * (1 + 1), base_dims, time_embedding_dims, groups=groups
+                        base_dims * (1 + 1),
+                        base_dims,
+                        time_embedding_dims,
+                        groups=groups,
                     ),
                 ),
                 SwitchSequential(
                     UNetResidualBlock(  # + hs[0]
-                        base_dims * (1 + 1), base_dims, time_embedding_dims, groups=groups
+                        base_dims * (1 + 1),
+                        base_dims,
+                        time_embedding_dims,
+                        groups=groups,
                     ),
                 ),
             ]

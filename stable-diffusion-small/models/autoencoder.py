@@ -4,11 +4,24 @@ import torch.nn.functional as F
 from utils import instantiate_object, log_reconstruction
 
 
+class Posterior:
+    def __init__(self, z, mu, log_var):
+        self.z = z
+        self.mu = mu
+        self.log_var = log_var
+
+    def kl(self):
+        return -0.5 * torch.sum(
+            1 + self.log_var - self.mu.pow(2) - self.log_var.exp(), dim=1
+        )
+
+
 class VAutoEncoder(L.LightningModule):
     def __init__(
         self,
         encoder_config,
         decoder_config,
+        loss_config,
         ckpt_dir: str,
         lr: float,
         min_beta: float,
@@ -19,6 +32,7 @@ class VAutoEncoder(L.LightningModule):
 
         self.encoder_config = encoder_config
         self.decoder_config = decoder_config
+        self.loss = instantiate_object(loss_config)
         self.encoder = None
         self.decoder = None
         self.ckpt_dir = ckpt_dir
@@ -27,6 +41,7 @@ class VAutoEncoder(L.LightningModule):
         self.min_beta = min_beta
         self.max_beta = max_beta
         self.kl_anneal_epochs = kl_anneal_epochs
+        self.automatic_optimization = False
 
         self.save_hyperparameters()
 
@@ -40,7 +55,7 @@ class VAutoEncoder(L.LightningModule):
     def forward(self, x):
         z, mean, log_var = self.encoder(x)
         recon_x = self.decoder(z)
-        return recon_x, mean, log_var
+        return recon_x, z, mean, log_var
 
     def encode(self, x):
         z, mean, log_var = self.encoder(x)
@@ -50,34 +65,136 @@ class VAutoEncoder(L.LightningModule):
         recon_x = self.decoder(z)
         return recon_x
 
-    def training_step(self, batch, batch_idx):
-        x, _ = batch
-        recon_x, mu, logvar = self(x)
-        mse, kld, beta = self.loss_function(recon_x, x, mu, logvar)
-        loss = mse + beta * kld
+    def get_last_layer(self):
+        return self.decoder.conv_out.weight
 
-        self.log("mse", mse)
-        self.log("kld", kld)
-        self.log("beta", beta)
-        self.log("train_loss", loss)
-        return loss
+    # def training_step(self, batch, batch_idx, optimizer_idx):
+    #     x, _ = batch
+    #     recon_x, z, _, _ = self(x)
+
+    #     current_lr = self.trainer.optimizers[optimizer_idx].param_groups[0]["lr"]
+    #     self.log("lr", current_lr)
+
+    #     if optimizer_idx == 0:
+    #         aeloss, log_dict_ae = self.loss(
+    #             x,
+    #             recon_x,
+    #             z,
+    #             optimizer_idx,
+    #             self.global_step,
+    #             last_layer=self.get_last_layer(),
+    #             split="train",
+    #         )
+
+    #         self.log("ae_loss", aeloss)
+    #         self.log("ae_loss_dict", log_dict_ae)
+
+    #         return aeloss
+
+    #     if optimizer_idx == 1:
+    #         # train the discriminator
+    #         discloss, log_dict_disc = self.loss(
+    #             x,
+    #             recon_x,
+    #             z,
+    #             optimizer_idx,
+    #             self.global_step,
+    #             last_layer=self.get_last_layer(),
+    #             split="train",
+    #         )
+
+    #         self.log("disc_loss", discloss)
+    #         self.log("disc_loss_dict", log_dict_disc)
+
+    def training_step(self, batch, batch_idx):
+        # Get the optimizers
+        opt_ae, opt_disc = self.optimizers()
+
+        # Fetch the inputs
+        x, _ = batch
+        recon_x, z, mu, log_var = self(x)
+
+        posterior = Posterior(z, mu, log_var)
+
+        # Update the autoencoder
+        aeloss, log_dict_ae = self.loss(
+            x,
+            recon_x,
+            posterior,
+            optimizer_idx=0,
+            global_step=self.global_step,
+            last_layer=self.get_last_layer(),
+            split="train",
+        )
+
+        # Log autoencoder loss and metrics
+        self.log("ae_loss", aeloss, prog_bar=True, logger=True)
+
+        for key, value in log_dict_ae.items():
+            self.log(f"ae_{key}", value, logger=True)
+
+        # Perform a backward pass and optimization step for the autoencoder
+        self.manual_backward(aeloss)
+        opt_ae.step()
+        opt_ae.zero_grad()
+
+        # Update the discriminator
+        discloss, log_dict_disc = self.loss(
+            x,
+            recon_x,
+            posterior,
+            optimizer_idx=1,
+            global_step=self.global_step,
+            last_layer=self.get_last_layer(),
+            split="train",
+        )
+
+        # Log discriminator loss and metrics
+        self.log("disc_loss", discloss, prog_bar=True, logger=True)
+        for key, value in log_dict_disc.items():
+            self.log(f"disc_{key}", value, logger=True)
+
+        # Perform a backward pass and optimization step for the discriminator
+        self.manual_backward(discloss)
+        opt_disc.step()
+        opt_disc.zero_grad()
 
     def validation_step(self, batch, batch_idx):
         x, _ = batch
-        recon_x, mu, logvar = self(x)
-        mse, kld, beta = self.loss_function(recon_x, x, mu, logvar)
-        loss = mse + beta * kld
-        self.log("mse", mse)
-        self.log("kld", kld)
-        self.log("beta", beta)
-        self.log("val_loss", loss)
+        recon_x, z, mu, log_var = self(x)
+
+        posterior = Posterior(z, mu, log_var)
+
+        aeloss, log_dict_ae = self.loss(
+            x,
+            recon_x,
+            posterior,
+            0,
+            self.global_step,
+            last_layer=self.get_last_layer(),
+            split="val",
+        )
+
+        for key, value in log_dict_ae.items():
+            self.log(f"ae_{key}", value, logger=True)
+
+        discloss, log_dict_disc = self.loss(
+            x,
+            recon_x,
+            posterior,
+            1,
+            self.global_step,
+            last_layer=self.get_last_layer(),
+            split="val",
+        )
+
+        for key, value in log_dict_disc.items():
+            self.log(f"disc_{key}", value, logger=True)
 
         if batch_idx == 0:
             log_reconstruction(
                 self.logger, x, recon_x, self.current_epoch, self.global_step
             )
-
-        return loss
 
     def get_kl_weight(self):
         return min(
@@ -88,9 +205,10 @@ class VAutoEncoder(L.LightningModule):
 
     def loss_function(self, recon_x, x, mu, logvar):
         MSE = F.mse_loss(recon_x, x, reduction="mean")
-        # (batch_dim, feature_dim)
+
         KLD = torch.mean(
-            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1), dim=0
+            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=(1, 2, 3)),
+            dim=0,
         )
 
         beta = self.get_kl_weight()
@@ -98,18 +216,30 @@ class VAutoEncoder(L.LightningModule):
         return MSE, KLD, beta
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=1e-5)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            optimizer,
-            T_0=10,  # Number of epochs for the first restart
-            T_mult=2,  # Multiplier for the number of epochs between restarts
-            eta_min=1e-6,  # Minimum learning rate
+        opt_ae = torch.optim.Adam(
+            list(self.encoder.parameters()) + list(self.decoder.parameters()),
+            lr=self.lr,
+            betas=(0.5, 0.9),
         )
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "epoch",
-                "frequency": 1,
-            },
-        }
+        opt_disc = torch.optim.Adam(
+            self.loss.discriminator.parameters(), lr=self.lr, betas=(0.5, 0.9)
+        )
+
+        scheduler_ae = torch.optim.lr_scheduler.StepLR(
+            opt_ae,
+            step_size=10,  # Number of epochs after which LR is reduced
+            gamma=0.5,  # Multiplicative factor for LR reduction
+        )
+        scheduler_disc = torch.optim.lr_scheduler.StepLR(
+            opt_disc,
+            step_size=10,
+            gamma=0.5,
+        )
+
+        return (
+            [opt_ae, opt_disc],
+            [
+                {"scheduler": scheduler_ae, "interval": "epoch", "frequency": 1},
+                {"scheduler": scheduler_disc, "interval": "epoch", "frequency": 1},
+            ],
+        )

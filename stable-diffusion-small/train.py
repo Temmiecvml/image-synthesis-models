@@ -20,13 +20,15 @@ load_dotenv()  # set WANDB_API_KEY as env
 
 torch.set_float32_matmul_precision("medium")
 
+
 def get_available_device():
     if torch.cuda.is_available():
-        return 'cuda'
+        return "cuda"
     elif torch.backends.mps.is_available():
-        return 'mps'
+        return "mps"
     else:
-        return 'cpu'
+        return "cpu"
+
 
 def get_fsdp_strategy(
     model_name,
@@ -62,7 +64,7 @@ def get_ckpt_dir(config, run_name: str):
 
 
 def train_model(config, ckpt: str, seed: int, metric_logger):
-   
+
     config.data.seed = seed
     config.train.accelerator = get_available_device()
     ckpt_dir = get_ckpt_dir(config, metric_logger.experiment.name)
@@ -94,13 +96,13 @@ def train_model(config, ckpt: str, seed: int, metric_logger):
             RichProgressBar(),
             ModelCheckpoint(
                 save_top_k=2,
-                monitor="val_loss",
+                monitor="ae_val/rec_loss",
                 mode="min",
                 dirpath=ckpt_dir,
                 filename=f"{config.train.model_name}" + "-{epoch:02d}-{val_loss:.2f}",
             ),
             EarlyStopping(
-                monitor="val_loss",
+                monitor="ae_val/rec_loss",
                 mode="min",
                 check_finite=True,
                 min_delta=config.train.early_stopping_min_delta,

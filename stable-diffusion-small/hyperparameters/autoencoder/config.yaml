@@ -1,15 +1,15 @@
 shared_configs:
   image_size: 256
-  latent_dim: 1024
   base_channels: 16 # 192
   num_groups: 8
+  z_dims: 8
   z_scale_factor: 1 # 0.18215
 
 train:
   model_name: "autoencoder"
   checkpoint_dir: "ckpts/model={model_name}/dataset={data_name}/run={run_name}/date={date}/"
   precision: bf16-mixed
-  accumulate_grad_batches: 5
+  accumulate_grad_batches: 1
   min_wrap_params: 200_000
   max_epochs: 100
   val_check_interval: 0.25 # 0-1 indicates fraction of an epoch. >1 indicates number of batches/steps
@@ -19,24 +19,31 @@ train:
 model:
   target: models.autoencoder.VAutoEncoder
   params:
-    lr: 1e-4
-    min_beta: 0
-    max_beta: 0.1
+    lr: 1e-5
+    min_beta: 1e-3
+    max_beta: 1e-1
     kl_anneal_epochs: 10
     encoder_config:
       target: modules.autoencoder.encoder.VEncoder
       params:
-        image_size: ${shared_configs.image_size}
-        latent_dim: ${shared_configs.latent_dim}
         base_channels: ${shared_configs.base_channels}
         num_groups: ${shared_configs.num_groups}
+        z_dims: ${shared_configs.z_dims}
         z_scale_factor: ${shared_configs.z_scale_factor}
     decoder_config:
       target: modules.autoencoder.decoder.VDecoder
       params:
         base_channels: ${shared_configs.base_channels}
         num_groups: ${shared_configs.num_groups}
+        z_dims: ${shared_configs.z_dims}
         z_scale_factor: ${shared_configs.z_scale_factor}
+
+    loss_config:
+      target: modules.losses.contperceptual.LPIPSWithDiscriminator
+      params:
+        disc_start: 50001
+        kl_weight: 1.0e-06
+        disc_weight: 0.5
 
 data:
   target: modules.data.autoencoder.AutoEncoderDataModule
