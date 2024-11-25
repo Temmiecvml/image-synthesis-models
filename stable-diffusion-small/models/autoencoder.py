@@ -12,7 +12,7 @@ class Posterior:
 
     def kl(self):
         return -0.5 * torch.sum(
-            1 + self.log_var - self.mu.pow(2) - self.log_var.exp(), dim=1
+            1 + self.log_var - self.mu.pow(2) - self.log_var.exp(), dim=[1, 2, 3]
         )
 
 
@@ -68,55 +68,14 @@ class VAutoEncoder(L.LightningModule):
     def get_last_layer(self):
         return self.decoder.conv_out.weight
 
-    # def training_step(self, batch, batch_idx, optimizer_idx):
-    #     x, _ = batch
-    #     recon_x, z, _, _ = self(x)
-
-    #     current_lr = self.trainer.optimizers[optimizer_idx].param_groups[0]["lr"]
-    #     self.log("lr", current_lr)
-
-    #     if optimizer_idx == 0:
-    #         aeloss, log_dict_ae = self.loss(
-    #             x,
-    #             recon_x,
-    #             z,
-    #             optimizer_idx,
-    #             self.global_step,
-    #             last_layer=self.get_last_layer(),
-    #             split="train",
-    #         )
-
-    #         self.log("ae_loss", aeloss)
-    #         self.log("ae_loss_dict", log_dict_ae)
-
-    #         return aeloss
-
-    #     if optimizer_idx == 1:
-    #         # train the discriminator
-    #         discloss, log_dict_disc = self.loss(
-    #             x,
-    #             recon_x,
-    #             z,
-    #             optimizer_idx,
-    #             self.global_step,
-    #             last_layer=self.get_last_layer(),
-    #             split="train",
-    #         )
-
-    #         self.log("disc_loss", discloss)
-    #         self.log("disc_loss_dict", log_dict_disc)
-
     def training_step(self, batch, batch_idx):
-        # Get the optimizers
         opt_ae, opt_disc = self.optimizers()
 
-        # Fetch the inputs
         x, _ = batch
         recon_x, z, mu, log_var = self(x)
 
         posterior = Posterior(z, mu, log_var)
 
-        # Update the autoencoder
         aeloss, log_dict_ae = self.loss(
             x,
             recon_x,
@@ -127,18 +86,18 @@ class VAutoEncoder(L.LightningModule):
             split="train",
         )
 
-        # Log autoencoder loss and metrics
         self.log("ae_loss", aeloss, prog_bar=True, logger=True)
 
         for key, value in log_dict_ae.items():
             self.log(f"ae_{key}", value, logger=True)
 
-        # Perform a backward pass and optimization step for the autoencoder
+        lr_ae = opt_ae.param_groups[0]["lr"]
+        self.log("lr_ae", lr_ae, prog_bar=True, logger=True)
+
         self.manual_backward(aeloss)
         opt_ae.step()
         opt_ae.zero_grad()
 
-        # Update the discriminator
         discloss, log_dict_disc = self.loss(
             x,
             recon_x,
@@ -149,12 +108,13 @@ class VAutoEncoder(L.LightningModule):
             split="train",
         )
 
-        # Log discriminator loss and metrics
         self.log("disc_loss", discloss, prog_bar=True, logger=True)
         for key, value in log_dict_disc.items():
             self.log(f"disc_{key}", value, logger=True)
 
-        # Perform a backward pass and optimization step for the discriminator
+        lr_disc = opt_disc.param_groups[0]["lr"]
+        self.log("lr_disc", lr_disc, prog_bar=True, logger=True)
+
         self.manual_backward(discloss)
         opt_disc.step()
         opt_disc.zero_grad()

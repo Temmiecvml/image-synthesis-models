@@ -1,5 +1,4 @@
 import argparse
-import datetime
 from functools import partial
 
 import lightning as L
@@ -14,20 +13,11 @@ from modules.autoencoder.attention_block import VAttentionBlock
 from modules.autoencoder.residual_block import VResidualBlock
 from omegaconf import OmegaConf
 from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
-from utils import instantiate_object, logger
+from utils import instantiate_object, logger, get_available_device, get_ckpt_dir
 
 load_dotenv()  # set WANDB_API_KEY as env
 
 torch.set_float32_matmul_precision("medium")
-
-
-def get_available_device():
-    if torch.cuda.is_available():
-        return "cuda"
-    elif torch.backends.mps.is_available():
-        return "mps"
-    else:
-        return "cpu"
 
 
 def get_fsdp_strategy(
@@ -52,17 +42,6 @@ def get_fsdp_strategy(
     )
 
 
-def get_ckpt_dir(config, run_name: str):
-    now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    _ckpt_dir = config.train.checkpoint_dir.replace("{date}", now)
-    _ckpt_dir = _ckpt_dir.replace("{run_name}", run_name)
-    _ckpt_dir = _ckpt_dir.replace(
-        "{data_name}", config.data.params.data_path.lower().replace("/", "_")
-    )
-    _ckpt_dir = _ckpt_dir.replace("{model_name}", config.train.model_name.lower())
-    return _ckpt_dir
-
-
 def train_model(config, ckpt: str, seed: int, metric_logger):
 
     config.data.seed = seed
@@ -72,6 +51,8 @@ def train_model(config, ckpt: str, seed: int, metric_logger):
     model = instantiate_object(config.model, ckpt_dir=ckpt_dir)
     data_module = instantiate_object(config.data)
     metric_logger.watch(model)
+
+    metric_to_monitor = config.train.metric_to_monitor
 
     trainer = L.Trainer(
         strategy=(
@@ -96,13 +77,16 @@ def train_model(config, ckpt: str, seed: int, metric_logger):
             RichProgressBar(),
             ModelCheckpoint(
                 save_top_k=2,
-                monitor="ae_val/rec_loss",
+                monitor=metric_to_monitor,
                 mode="min",
                 dirpath=ckpt_dir,
-                filename=f"{config.train.model_name}" + "-{epoch:02d}-{val_loss:.2f}",
+                filename=f"{config.train.model_name}"
+                + "-{epoch:02d}-{metric_to_monitor:.2f}".replace(
+                    "metric_to_monitor", metric_to_monitor
+                ),
             ),
             EarlyStopping(
-                monitor="ae_val/rec_loss",
+                monitor=metric_to_monitor,
                 mode="min",
                 check_finite=True,
                 min_delta=config.train.early_stopping_min_delta,
@@ -164,7 +148,7 @@ if __name__ == "__main__":
         kwargs = {}
 
     wandb_logger = WandbLogger(
-        project=f"poc_local_stable_diffusion_{config.train.model_name}",
+        project=f"poc_stable_diffusion_{config.train.model_name}",
         prefix="poc",
         save_dir="logs",
         **kwargs,

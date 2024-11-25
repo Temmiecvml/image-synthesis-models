@@ -3,6 +3,7 @@ import os
 import random
 from typing import Optional
 
+import datetime
 import torch
 import wandb
 from PIL import Image
@@ -45,6 +46,26 @@ def instantiate_object(config, instantiate=True, **kwargs):
         return getattr(module_imp, cls)(**params)
 
     return getattr(module_imp, cls)
+
+
+def get_available_device():
+    if torch.cuda.is_available():
+        return "cuda"
+    elif torch.backends.mps.is_available():
+        return "mps"
+    else:
+        return "cpu"
+
+
+def get_ckpt_dir(config, run_name: str):
+    now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    _ckpt_dir = config.train.checkpoint_dir.replace("{date}", now)
+    _ckpt_dir = _ckpt_dir.replace("{run_name}", run_name)
+    _ckpt_dir = _ckpt_dir.replace(
+        "{data_name}", config.data.params.data_path.lower().replace("/", "_")
+    )
+    _ckpt_dir = _ckpt_dir.replace("{model_name}", config.train.model_name.lower())
+    return _ckpt_dir
 
 
 def extract_into_tensor(a, t, x_shape):

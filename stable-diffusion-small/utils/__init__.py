@@ -13,6 +13,8 @@ from .utils import (
     log_reconstruction,
     save_checkpoint,
     tensor_to_pil_images,
+    get_available_device,
+    get_ckpt_dir,
 )
 
 
