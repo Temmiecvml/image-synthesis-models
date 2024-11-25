@@ -148,7 +148,7 @@ if __name__ == "__main__":
         kwargs = {}
 
     wandb_logger = WandbLogger(
-        project=f"poc_stable_diffusion_{config.train.model_name}",
+        project=f"poc_local_stable_diffusion_{config.train.model_name}",
         prefix="poc",
         save_dir="logs",
         **kwargs,
