@@ -46,9 +46,19 @@ def train_model(config, ckpt: str, seed: int, metric_logger):
 
     config.data.seed = seed
     config.train.accelerator = get_available_device()
-    ckpt_dir = get_ckpt_dir(config, metric_logger.experiment.name)
+    run_name = (
+        metric_logger.experiment.name
+        if isinstance(metric_logger.experiment.name, str)
+        else "default"
+    )
 
-    model = instantiate_object(config.model, ckpt_dir=ckpt_dir)
+    ckpt_dir = get_ckpt_dir(config, run_name)
+
+    model = instantiate_object(
+        config.model,
+        ckpt_dir=ckpt_dir,
+        accumulate_grad_batches=config.train.accumulate_grad_batches,
+    )
     data_module = instantiate_object(config.data)
     metric_logger.watch(model)
 

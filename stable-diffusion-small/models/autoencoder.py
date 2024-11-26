@@ -27,6 +27,7 @@ class VAutoEncoder(L.LightningModule):
         min_beta: float,
         max_beta: float,
         kl_anneal_epochs: int,
+        accumulate_grad_batches: int,
     ):
         super().__init__()
 
@@ -42,6 +43,7 @@ class VAutoEncoder(L.LightningModule):
         self.max_beta = max_beta
         self.kl_anneal_epochs = kl_anneal_epochs
         self.automatic_optimization = False
+        self.accumulate_grad_batches = accumulate_grad_batches
 
         self.save_hyperparameters()
 
@@ -70,12 +72,11 @@ class VAutoEncoder(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         opt_ae, opt_disc = self.optimizers()
-
         x, _ = batch
         recon_x, z, mu, log_var = self(x)
-
         posterior = Posterior(z, mu, log_var)
 
+        # Generator Update
         aeloss, log_dict_ae = self.loss(
             x,
             recon_x,
@@ -94,9 +95,13 @@ class VAutoEncoder(L.LightningModule):
         lr_ae = opt_ae.param_groups[0]["lr"]
         self.log("lr_ae", lr_ae, prog_bar=True, logger=True)
 
+        aeloss = aeloss / self.accumulate_grad_batches
         self.manual_backward(aeloss)
-        opt_ae.step()
-        opt_ae.zero_grad()
+        if (batch_idx + 1) % self.accumulate_grad_batches == 0:
+            opt_ae.step()
+            opt_ae.zero_grad()
+
+        # Discriminator update
 
         discloss, log_dict_disc = self.loss(
             x,
@@ -115,9 +120,17 @@ class VAutoEncoder(L.LightningModule):
         lr_disc = opt_disc.param_groups[0]["lr"]
         self.log("lr_disc", lr_disc, prog_bar=True, logger=True)
 
+        discloss = discloss / self.accumulate_grad_batches
         self.manual_backward(discloss)
-        opt_disc.step()
-        opt_disc.zero_grad()
+        if (batch_idx + 1) % self.accumulate_grad_batches == 0:
+            opt_disc.step()
+            opt_disc.zero_grad()
+
+        # step the lr schedulers every 10 epochs
+        sch1, sch2 = self.lr_schedulers()
+        if (self.trainer.current_epoch + 1) % 5 == 0:
+            sch1.step()
+            sch2.step()
 
     def validation_step(self, batch, batch_idx):
         x, _ = batch
@@ -187,12 +200,12 @@ class VAutoEncoder(L.LightningModule):
 
         scheduler_ae = torch.optim.lr_scheduler.StepLR(
             opt_ae,
-            step_size=10,  # Number of epochs after which LR is reduced
+            step_size=5,  # Number of epochs after which LR is reduced
             gamma=0.5,  # Multiplicative factor for LR reduction
         )
         scheduler_disc = torch.optim.lr_scheduler.StepLR(
             opt_disc,
-            step_size=10,
+            step_size=5,
             gamma=0.5,
         )
 
