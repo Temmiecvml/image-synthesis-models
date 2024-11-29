@@ -1,7 +1,26 @@
 import lightning as L
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
 from utils import instantiate_object, log_reconstruction
+
+
+def should_validate(val_check_interval, steps_per_epoch, epoch, global_step):
+    if val_check_interval > 0 and val_check_interval < 1:
+        val_check_interval = int(steps_per_epoch * val_check_interval)
+        if global_step == val_check_interval:
+            return True
+
+    elif val_check_interval >= 1:
+        if val_check_interval == epoch:
+            return True
+    else:
+        raise ValueError(
+            f"val_check_interval: {val_check_interval} should be greater than 0"
+        )
+
+    return False
 
 
 class Posterior:
@@ -14,6 +33,18 @@ class Posterior:
         return -0.5 * torch.sum(
             1 + self.log_var - self.mu.pow(2) - self.log_var.exp(), dim=[1, 2, 3]
         )
+
+
+class Generator(nn.Module):
+    def __init__(self, encoder_config, decoder_config):
+        super().__init__()
+        self.encoder = instantiate_object(encoder_config)
+        self.decoder = instantiate_object(decoder_config)
+
+    def forward(self, x):
+        z, mean, log_var = self.encoder(x)
+        recon_x = self.decoder(z)
+        return recon_x, z, mean, log_var
 
 
 class VAutoEncoder(L.LightningModule):
@@ -33,186 +64,185 @@ class VAutoEncoder(L.LightningModule):
 
         self.encoder_config = encoder_config
         self.decoder_config = decoder_config
-        self.loss = instantiate_object(loss_config)
-        self.encoder = None
-        self.decoder = None
         self.ckpt_dir = ckpt_dir
-
         self.lr = lr
         self.min_beta = min_beta
         self.max_beta = max_beta
         self.kl_anneal_epochs = kl_anneal_epochs
-        self.automatic_optimization = False
         self.accumulate_grad_batches = accumulate_grad_batches
+
+        self.generator = instantiate_object(encoder_config, decoder_config)
+        self.discriminator = instantiate_object(loss_config)
 
         self.save_hyperparameters()
 
-    def configure_model(self):
-        if self.encoder is not None or self.decoder is not None:
-            return
-
-        self.encoder = instantiate_object(self.encoder_config)
-        self.decoder = instantiate_object(self.decoder_config)
-
-    def forward(self, x):
-        z, mean, log_var = self.encoder(x)
-        recon_x = self.decoder(z)
-        return recon_x, z, mean, log_var
-
     def encode(self, x):
-        z, mean, log_var = self.encoder(x)
+        z, mean, log_var = self.generator.encoder(x)
         return z, mean, log_var
 
     def decode(self, z):
-        recon_x = self.decoder(z)
+        recon_x = self.generator.decoder(z)
         return recon_x
 
     def get_last_layer(self):
         return self.decoder.conv_out.weight
 
-    def training_step(self, batch, batch_idx):
-        opt_ae, opt_disc = self.optimizers()
-        x, _ = batch
-        recon_x, z, mu, log_var = self(x)
-        posterior = Posterior(z, mu, log_var)
+    def train_model(
+        self,
+        fabric,
+        train_dataloader,
+        val_dataloader,
+        max_epochs,
+        val_check_interval,
+        metric_to_monitor,
+    ):
+        steps_per_epoch = len(train_dataloader) // train_dataloader.batch_size
 
-        # Generator Update
-        aeloss, log_dict_ae = self.loss(
-            x,
-            recon_x,
-            posterior,
-            optimizer_idx=0,
-            global_step=self.global_step,
-            last_layer=self.get_last_layer(),
-            split="train",
-        )
+        if not hasattr(self, "epoch"):
+            self.epoch = 1
 
-        self.log("ae_loss", aeloss, prog_bar=True, logger=True)
+        if not hasattr(self, "global_step"):
+            self.global_step = 1
 
-        for key, value in log_dict_ae.items():
-            self.log(f"ae_{key}", value, logger=True)
+        for epoch in tqdm(range(self.epoch, max_epochs + 1)):
+            print(f"Starting at Epoch {epoch} and Step {self.global_step}")
+            self.epoch = epoch
 
-        lr_ae = opt_ae.param_groups[0]["lr"]
-        self.log("lr_ae", lr_ae, prog_bar=True, logger=True)
+            for b_idx, (x, _) in enumerate(train_dataloader):
+                recon_x, z, mu, log_var = self.generator(x)
+                posterior = Posterior(z, mu, log_var)
+                aeloss, log_dict_ae = self.discriminator(
+                    x,
+                    recon_x,
+                    posterior,
+                    optimizer_idx=0,
+                    global_step=self.global_step,
+                    last_layer=self.get_last_layer(),
+                    split="train",
+                )
+                fabric.backward(aeloss)
+                self.opt_ae.step()
+                log_dict_ae["ae_lr"] = self.opt_ae.param_groups[0]["lr"]
+                fabric.log_dict(log_dict_ae, prog_bar=True, logger=True)
+                fabric.log("aeloss", aeloss, prog_bar=True, logger=True)
+                self.opt_ae.zero_grad()
 
-        aeloss = aeloss / self.accumulate_grad_batches
-        self.manual_backward(aeloss)
-        if (batch_idx + 1) % self.accumulate_grad_batches == 0:
-            opt_ae.step()
-            opt_ae.zero_grad()
+                discloss, log_dict_disc = self.discriminator(
+                    x,
+                    recon_x,
+                    posterior,
+                    optimizer_idx=1,
+                    global_step=self.global_step,
+                    last_layer=self.get_last_layer(),
+                    split="train",
+                )
 
-        # Discriminator update
+                fabric.backward(discloss)
+                log_dict_disc["disc_lr"] = self.opt_disc.param_groups[0]["lr"]
+                fabric.log_dict(log_dict_disc, prog_bar=True, logger=True)
+                self.opt_disc.zero_grad()
 
-        discloss, log_dict_disc = self.loss(
-            x,
-            recon_x,
-            posterior,
-            optimizer_idx=1,
-            global_step=self.global_step,
-            last_layer=self.get_last_layer(),
-            split="train",
-        )
+                if should_validate(
+                    val_check_interval, steps_per_epoch, self.epoch, self.global_step
+                ):
+                    self.validate_model(fabric, val_dataloader, metric_to_monitor)
 
-        self.log("disc_loss", discloss, prog_bar=True, logger=True)
-        for key, value in log_dict_disc.items():
-            self.log(f"disc_{key}", value, logger=True)
+                self.global_step += 1
 
-        lr_disc = opt_disc.param_groups[0]["lr"]
-        self.log("lr_disc", lr_disc, prog_bar=True, logger=True)
+            if (self.epoch + 1) % 5 == 0:
+                self.scheduler_ae.step()
+                self.scheduler_disc.step()
 
-        discloss = discloss / self.accumulate_grad_batches
-        self.manual_backward(discloss)
-        if (batch_idx + 1) % self.accumulate_grad_batches == 0:
-            opt_disc.step()
-            opt_disc.zero_grad()
+    def validate_model(
+        self,
+        fabric,
+        val_dataloader,
+        metric_to_monitor,
+    ):
 
-        # step the lr schedulers every 10 epochs
-        sch1, sch2 = self.lr_schedulers()
-        if (self.trainer.current_epoch + 1) % 5 == 0:
-            sch1.step()
-            sch2.step()
+        metric_values = [1e10, 1e10]
+        with torch.no_grad():
+            for batch_idx, (x, _) in enumerate(val_dataloader):
+                recon_x, z, mu, log_var = self(x)
+                posterior = Posterior(z, mu, log_var)
 
-    def validation_step(self, batch, batch_idx):
-        x, _ = batch
-        recon_x, z, mu, log_var = self(x)
+                aeloss, log_dict_ae = self.discriminator(
+                    x,
+                    recon_x,
+                    posterior,
+                    0,
+                    self.global_step,
+                    last_layer=self.get_last_layer(),
+                    split="val",
+                )
 
-        posterior = Posterior(z, mu, log_var)
+                fabric.log_dict(log_dict_ae, prog_bar=True, logger=True)
+                fabric.log("aeloss", aeloss, prog_bar=True, logger=True)
 
-        aeloss, log_dict_ae = self.loss(
-            x,
-            recon_x,
-            posterior,
-            0,
-            self.global_step,
-            last_layer=self.get_last_layer(),
-            split="val",
-        )
+                discloss, log_dict_disc = self.discriminator(
+                    x,
+                    recon_x,
+                    posterior,
+                    1,
+                    self.global_step,
+                    last_layer=self.get_last_layer(),
+                    split="val",
+                )
 
-        for key, value in log_dict_ae.items():
-            self.log(f"ae_{key}", value, logger=True)
+                fabric.log_dict(log_dict_disc, prog_bar=True, logger=True)
+                fabric.log("discloss", discloss, prog_bar=True, logger=True)
 
-        discloss, log_dict_disc = self.loss(
-            x,
-            recon_x,
-            posterior,
-            1,
-            self.global_step,
-            last_layer=self.get_last_layer(),
-            split="val",
-        )
+                metric = log_dict_ae.get(metric_to_monitor, "")
+                if not metric:
+                    metric = log_dict_disc[metric_to_monitor]
 
-        for key, value in log_dict_disc.items():
-            self.log(f"disc_{key}", value, logger=True)
+                if fabric.is_global_zero():
+                    state = {
+                        "model": self,
+                        "optimizer_ae": self.optimizer_ae,
+                        "optimizer_disc": self.optimizer_disc,
+                        "scheduler_ae": self.scheduler_ae,
+                        "scheduler_disc": self.scheduler_disc,
+                        "epoch": self.epoch,
+                        "global_step": self.global_step,
+                    }
 
-        if batch_idx == 0:
-            log_reconstruction(
-                self.logger, x, recon_x, self.current_epoch, self.global_step
-            )
+                    # save if metric better than previous values
+                    second_best_prev = max(metric_values)
+                    id_second_best_prev = metric_values.index(second_best_prev)
 
-    def get_kl_weight(self):
-        return min(
-            self.max_beta,
-            self.min_beta
-            + (self.current_epoch / self.kl_anneal_epochs) * self.max_beta,
-        )
+                    if metric < min(metric_values):
+                        fabric.save(
+                            f"{self.ckpt_dir}/autoencoder-epoch={self.epoch:02d}-step={self.global_step:06d}-{metric_to_monitor}={metric:.2f}.ckpt",
+                            state,
+                        )
+                        metric_values[id_second_best_prev] = metric
+                        print(f"Saved model with improved metric {metric}")
 
-    def loss_function(self, recon_x, x, mu, logvar):
-        MSE = F.mse_loss(recon_x, x, reduction="mean")
+                if fabric.is_global_zero() and batch_idx == 0:
+                    log_reconstruction(
+                        self.logger, x, recon_x, self.epoch, self.global_step
+                    )
 
-        KLD = torch.mean(
-            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=(1, 2, 3)),
-            dim=0,
-        )
-
-        beta = self.get_kl_weight()
-
-        return MSE, KLD, beta
+                fabric.barrier()
 
     def configure_optimizers(self):
-        opt_ae = torch.optim.Adam(
-            list(self.encoder.parameters()) + list(self.decoder.parameters()),
+        self.opt_ae = torch.optim.Adam(
+            list(self.generator.parameters()),
             lr=self.lr,
             betas=(0.5, 0.9),
         )
-        opt_disc = torch.optim.Adam(
-            self.loss.discriminator.parameters(), lr=self.lr, betas=(0.5, 0.9)
+        self.opt_disc = torch.optim.Adam(
+            self.discriminator.discriminator.parameters(), lr=self.lr, betas=(0.5, 0.9)
         )
 
-        scheduler_ae = torch.optim.lr_scheduler.StepLR(
-            opt_ae,
+        self.scheduler_ae = torch.optim.lr_scheduler.StepLR(
+            self.opt_ae,
             step_size=5,  # Number of epochs after which LR is reduced
             gamma=0.5,  # Multiplicative factor for LR reduction
         )
-        scheduler_disc = torch.optim.lr_scheduler.StepLR(
-            opt_disc,
+        self.scheduler_disc = torch.optim.lr_scheduler.StepLR(
+            self.opt_disc,
             step_size=5,
             gamma=0.5,
-        )
-
-        return (
-            [opt_ae, opt_disc],
-            [
-                {"scheduler": scheduler_ae, "interval": "epoch", "frequency": 1},
-                {"scheduler": scheduler_disc, "interval": "epoch", "frequency": 1},
-            ],
         )
