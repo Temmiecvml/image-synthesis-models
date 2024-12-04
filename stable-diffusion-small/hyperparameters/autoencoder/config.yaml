@@ -15,7 +15,7 @@ train:
   val_check_interval: 0.25 # 0-1 indicates fraction of an epoch. >1 indicates number of batches/steps
   early_stopping_min_delta: 1e-5
   early_stopping_patience: 10
-  metric_to_monitor: "ae_val/rec_loss"
+  metric_to_monitor: "val/rec_loss"
   
 model:
   target: models.autoencoder.VAutoEncoder

@@ -22,7 +22,7 @@ load_dotenv()  # set WANDB_API_KEY as env
 torch.set_float32_matmul_precision("medium")
 
 
-def get_epoch_and_global_step(ckpt_path):
+def get_epoch_and_step(ckpt_path):
     """
     Extracts the epoch and global step from a checkpoint file name.
     """
@@ -33,9 +33,9 @@ def get_epoch_and_global_step(ckpt_path):
         raise ValueError(f"Checkpoint path does not match expected format: {ckpt_path}")
 
     epoch = int(match.group(1))
-    global_step = int(match.group(2))
+    step = int(match.group(2)) 
 
-    return epoch, global_step
+    return epoch, step
 
 
 def get_fsdp_strategy(
@@ -64,7 +64,8 @@ def get_fsdp_strategy(
 
 
 def train_autoencoder(config, ckpt: str, seed: int, metric_logger):
-
+    config.data.seed = seed
+    config.train.accelerator = get_available_device()
     metric_to_monitor = config.train.metric_to_monitor
     run_name = (
         metric_logger.experiment.name
@@ -73,19 +74,6 @@ def train_autoencoder(config, ckpt: str, seed: int, metric_logger):
     )
 
     ckpt_dir = get_ckpt_dir(config, run_name)
-
-    with fabric.init_module(empty_init=True):
-        model = instantiate_object(
-            config.model,
-            ckpt_dir=ckpt_dir,
-            accumulate_grad_batches=config.train.accumulate_grad_batches,
-        )
-
-    optimizer_ae, optimizer_disc, scheduler_ae, scheduler_disc = (
-        model.configure_optimizers()
-    )
-
-    data_module = instantiate_object(config.data)
 
     fabric = L.Fabric(
         accelerator=get_available_device(),
@@ -97,23 +85,35 @@ def train_autoencoder(config, ckpt: str, seed: int, metric_logger):
         ),
     )
 
+    with fabric.init_module(empty_init=True):
+        model = instantiate_object(
+            config.model,
+            ckpt_dir=ckpt_dir,
+            accumulate_grad_batches=config.train.accumulate_grad_batches,
+        )
+
+    model.configure_optimizers()
+    model.metric_logger = metric_logger
+
+    data_module = instantiate_object(config.data)
+
     state = {
         "model": model,
-        "optimizer_ae": optimizer_ae,
-        "optimizer_disc": optimizer_disc,
-        "scheduler_ae": scheduler_ae,
-        "scheduler_disc": scheduler_disc,
-        "epoch": epoch,
-        "global_step": global_step,
+        "opt_ae": model.opt_ae,
+        "opt_disc": model.opt_disc,
+        "scheduler_ae": model.scheduler_ae,
+        "scheduler_disc": model.scheduler_disc,
+        "epoch": model.epoch,
+        "step": model.step,
     }
 
     if ckpt:
-        epoch, global_step = get_epoch_and_global_step(ckpt)
+        epoch, step = get_epoch_and_step(ckpt)
         state["epoch"] = epoch
-        state["global_step"] = global_step
+        state["step"] = step
         fabric.load(model, state)
         model.epoch = epoch
-        model.global_step = global_step
+        model.step = step
 
     fabric.launch()
     fabric.seed_everything(seed)
@@ -125,9 +125,9 @@ def train_autoencoder(config, ckpt: str, seed: int, metric_logger):
     train_loader = data_module.train_dataloader()
     val_loader = data_module.val_dataloader()
 
-    model.generator, optimizer_ae = fabric.setup(model.generator, optimizer_ae)
-    model.discriminator, optimizer_disc = fabric.setup(
-        model.discriminator, optimizer_disc
+    model.generator, model.opt_ae = fabric.setup(model.generator, model.opt_ae)
+    model.discriminator, model.opt_disc = fabric.setup(
+        model.discriminator, model.opt_disc
     )
     train_loader = fabric.setup_dataloaders(train_loader)
     val_loader = fabric.setup_dataloaders(val_loader)
@@ -265,7 +265,10 @@ if __name__ == "__main__":
     )
 
     try:
-        train_model(config, ckpt, args.seed, wandb_logger)
+        if "autoencoder" in args.config:
+            train_autoencoder(config, ckpt, args.seed, wandb_logger)
+        else:
+            train_ldm(config, ckpt, args.seed, wandb_logger)
 
     except Exception as e:
         logger.error(e)
