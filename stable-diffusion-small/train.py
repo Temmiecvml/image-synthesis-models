@@ -42,6 +42,9 @@ def get_fsdp_strategy(
     model_name,
     min_wrap_params,
 ):
+    device = get_available_device()
+    if device in ["mps", "cpu"]:
+        return "auto"
 
     my_auto_wrap_policy = partial(
         size_based_auto_wrap_policy, min_num_params=min_wrap_params, recurse=True
@@ -76,14 +79,17 @@ def train_autoencoder(config, ckpt: str, seed: int, metric_logger):
     ckpt_dir = get_ckpt_dir(config, run_name)
 
     fabric = L.Fabric(
-        accelerator=get_available_device(),
-        devices=(
-            "auto" if config.train.accelerator == "mps" else torch.cuda.device_count()
-        ),
+        accelerator=config.train.accelerator,
+        devices="auto",
         precision=(
-            "32-true" if config.train.accelerator == "mps" else config.train.precision
+            "32-true" if config.train.accelerator == "mps" or torch.cuda.device_count() == 1 else config.train.precision
         ),
+        strategy=get_fsdp_strategy(
+            "autoencoder", config.train.min_wrap_params
+        )
     )
+
+    fabric.launch()
 
     with fabric.init_module(empty_init=True):
         model = instantiate_object(
@@ -115,7 +121,6 @@ def train_autoencoder(config, ckpt: str, seed: int, metric_logger):
         model.epoch = epoch
         model.step = step
 
-    fabric.launch()
     fabric.seed_everything(seed)
 
     with fabric.rank_zero_first():
