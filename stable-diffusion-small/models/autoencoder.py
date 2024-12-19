@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
+
 from utils import instantiate_object, log_reconstruction
 
 
@@ -47,7 +48,7 @@ class Generator(nn.Module):
         return recon_x, z, mean, log_var
 
 
-class VAutoEncoder(L.LightningModule):
+class VAutoEncoder(nn.Module):
     def __init__(
         self,
         encoder_config,
@@ -76,8 +77,6 @@ class VAutoEncoder(L.LightningModule):
 
         self.epoch = 1
         self.step = 1
-
-        self.save_hyperparameters()
 
     def encode(self, x):
         z, mean, log_var = self.generator.encoder(x)
@@ -123,7 +122,7 @@ class VAutoEncoder(L.LightningModule):
                 log_dict_ae["ae_lr"] = self.opt_ae.param_groups[0]["lr"]
                 fabric.log_dict(log_dict_ae)
                 fabric.log("aeloss", aeloss)
-                
+
                 self.opt_disc.zero_grad()
                 discloss, log_dict_disc = self.discriminator(
                     x,
@@ -136,9 +135,9 @@ class VAutoEncoder(L.LightningModule):
                 )
 
                 fabric.backward(discloss)
+                self.opt_disc.step()
                 log_dict_disc["disc_lr"] = self.opt_disc.param_groups[0]["lr"]
                 fabric.log_dict(log_dict_disc)
-                
 
                 if should_validate(
                     val_check_interval, steps_per_epoch, self.epoch, self.step
@@ -159,7 +158,7 @@ class VAutoEncoder(L.LightningModule):
     ):
 
         metric_values = [1e10, 1e10]
-       
+
         for batch_idx, (x, _) in enumerate(val_dataloader):
             recon_x, z, mu, log_var = self.generator(x)
             posterior = Posterior(z, mu, log_var)
@@ -223,24 +222,3 @@ class VAutoEncoder(L.LightningModule):
                 )
 
             fabric.barrier()
-
-    def configure_optimizers(self):
-        self.opt_ae = torch.optim.Adam(
-            list(self.generator.parameters()),
-            lr=self.lr,
-            betas=(0.5, 0.9),
-        )
-        self.opt_disc = torch.optim.Adam(
-            self.discriminator.discriminator.parameters(), lr=self.lr, betas=(0.5, 0.9)
-        )
-
-        self.scheduler_ae = torch.optim.lr_scheduler.StepLR(
-            self.opt_ae,
-            step_size=5,  # Number of epochs after which LR is reduced
-            gamma=0.5,  # Multiplicative factor for LR reduction
-        )
-        self.scheduler_disc = torch.optim.lr_scheduler.StepLR(
-            self.opt_disc,
-            step_size=5,
-            gamma=0.5,
-        )

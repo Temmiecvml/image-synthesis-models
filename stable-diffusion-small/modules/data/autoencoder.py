@@ -69,7 +69,7 @@ class CustomResizeAndCrop:
         return final_image
 
 
-class AutoEncoderDataModule(L.LightningDataModule):
+class AutoEncoderDataModule:
     def __init__(
         self,
         data_path: str,
@@ -144,26 +144,30 @@ class AutoEncoderDataModule(L.LightningDataModule):
                 dataset["test"], self.preprocess_batch
             )
 
-    def train_dataloader(self):
+    def train_dataloader(self, **kwargs):
         return DataLoader(
             dataset=self.train_ds,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             persistent_workers=self.num_workers > 0,
+            shuffle=True,
+            **kwargs,
         )
 
-    def val_dataloader(self):
+    def val_dataloader(self, **kwargs):
         return DataLoader(
             dataset=self.val_ds,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             persistent_workers=self.num_workers > 0,
+            **kwargs,
         )
 
-    def test_dataloader(self):
+    def test_dataloader(self, **kwargs):
         return DataLoader(
             dataset=self.test_ds,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             persistent_workers=self.num_workers > 0,
+            **kwargs,
         )

@@ -1,8 +1,9 @@
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
-from modules.losses.lpips import LPIPS
+import torch.nn.functional as F
+
 from modules.discriminator.model import NLayerDiscriminator, weights_init
+from modules.losses.lpips import LPIPS
 
 
 def l1(x, y):

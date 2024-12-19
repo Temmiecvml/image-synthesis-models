@@ -1,21 +1,24 @@
 import argparse
+import re
 from functools import partial
 
 import lightning as L
 import torch
-import re
 import torch.nn as nn
 from dotenv import load_dotenv
+from lightning.fabric.strategies import FSDPStrategy as FabricFSDPStrategy
 from lightning.pytorch import seed_everything
-from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
+from lightning.pytorch.callbacks import (EarlyStopping, ModelCheckpoint,
+                                         RichProgressBar)
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.strategies import FSDPStrategy
-from lightning.fabric.strategies import FSDPStrategy as FabricFSDPStrategy
-from modules.autoencoder.attention_block import VAttentionBlock
-from modules.autoencoder.residual_block import VResidualBlock
 from omegaconf import OmegaConf
 from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
-from utils import instantiate_object, logger, get_available_device, get_ckpt_dir
+
+from modules.autoencoder.attention_block import VAttentionBlock
+from modules.autoencoder.residual_block import VResidualBlock
+from utils import (get_available_device, get_ckpt_dir, instantiate_object,
+                   logger)
 
 load_dotenv()  # set WANDB_API_KEY as env
 
@@ -33,7 +36,7 @@ def get_epoch_and_step(ckpt_path):
         raise ValueError(f"Checkpoint path does not match expected format: {ckpt_path}")
 
     epoch = int(match.group(1))
-    step = int(match.group(2)) 
+    step = int(match.group(2))
 
     return epoch, step
 
@@ -49,7 +52,6 @@ def get_fsdp_strategy(
     my_auto_wrap_policy = partial(
         size_based_auto_wrap_policy, min_num_params=min_wrap_params, recurse=True
     )
-
     if model_name == "autoencoder":
         activation_checkpointing_policy = {
             VResidualBlock,
@@ -82,11 +84,11 @@ def train_autoencoder(config, ckpt: str, seed: int, metric_logger):
         accelerator=config.train.accelerator,
         devices="auto",
         precision=(
-            "32-true" if config.train.accelerator == "mps" or torch.cuda.device_count() == 1 else config.train.precision
+            "32-true"
+            if config.train.accelerator == "mps" or torch.cuda.device_count() == 1
+            else config.train.precision
         ),
-        strategy=get_fsdp_strategy(
-            "autoencoder", config.train.min_wrap_params
-        )
+        strategy=get_fsdp_strategy("autoencoder", config.train.min_wrap_params),
     )
 
     fabric.launch()

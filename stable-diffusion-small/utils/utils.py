@@ -1,9 +1,9 @@
+import datetime
 import importlib
 import os
 import random
 from typing import Optional
 
-import datetime
 import torch
 import wandb
 from PIL import Image
