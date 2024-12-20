@@ -16,6 +16,7 @@ from torch.distributed.fsdp import (MixedPrecision, ShardingStrategy,
                                     StateDictType)
 from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
 from torch.utils.data.distributed import DistributedSampler
+from torch.cuda.amp import autocast
 
 from utils import get_ckpt_dir, instantiate_object, logger
 
@@ -126,58 +127,59 @@ def train(
         )
 
     all_metrics = {}
-    for batch_idx, (x, _) in enumerate(train_loader):
-        x = x.to(local_rank)
-        opt_ae.zero_grad()
-        recon_x, z, mu, log_var = model.generator(x)
-        posterior = Posterior(z, mu, log_var)
+    with autocast(dtype=torch.bfloat16):
+        for batch_idx, (x, _) in enumerate(train_loader):
+            x = x.to(local_rank)
+            opt_ae.zero_grad()
+            recon_x, z, mu, log_var = model.generator(x)
+            posterior = Posterior(z, mu, log_var)
 
-        aeloss, log_dict_ae = model.discriminator(
-            x,
-            recon_x,
-            posterior,
-            optimizer_idx=0,
-            global_step=model.step,
-            last_layer=model.get_last_layer(),
-            split="train",
-        )
+            aeloss, log_dict_ae = model.discriminator(
+                x,
+                recon_x,
+                posterior,
+                optimizer_idx=0,
+                global_step=model.step,
+                last_layer=model.get_last_layer(),
+                split="train",
+            )
 
-        aeloss.backward()
-        opt_ae.step()
+            aeloss.backward()
+            opt_ae.step()
 
-        opt_disc.zero_grad()
-        discloss, log_dict_disc = model.discriminator(
-            x,
-            recon_x,
-            posterior,
-            optimizer_idx=1,
-            global_step=model.step,
-            last_layer=model.get_last_layer(),
-            split="train",
-        )
+            opt_disc.zero_grad()
+            discloss, log_dict_disc = model.discriminator(
+                x,
+                recon_x,
+                posterior,
+                optimizer_idx=1,
+                global_step=model.step,
+                last_layer=model.get_last_layer(),
+                split="train",
+            )
 
-        discloss.backward()
-        opt_disc.step()
+            discloss.backward()
+            opt_disc.step()
 
-        log_dict_ae["ae_loss"] = aeloss.item()
-        log_dict_disc["disc_loss"] = discloss.item()
+            log_dict_ae["ae_loss"] = aeloss.item()
+            log_dict_disc["disc_loss"] = discloss.item()
 
-        if batch_idx == 0:
-            all_metrics = {
-                **log_dict_ae,
-                **log_dict_disc,
-                "ae_loss": aeloss.item(),
-                "disc_loss": discloss.item(),
-            }
-        else:
-            for key in log_dict_ae.keys():
-                all_metrics[key] += log_dict_ae[key]
+            if batch_idx == 0:
+                all_metrics = {
+                    **log_dict_ae,
+                    **log_dict_disc,
+                    "ae_loss": aeloss.item(),
+                    "disc_loss": discloss.item(),
+                }
+            else:
+                for key in log_dict_ae.keys():
+                    all_metrics[key] += log_dict_ae[key]
 
-            for key in log_dict_disc.keys():
-                all_metrics[key] += log_dict_disc[key]
+                for key in log_dict_disc.keys():
+                    all_metrics[key] += log_dict_disc[key]
 
-        if rank == 0:
-            inner_pbar.update(1)
+            if rank == 0:
+                inner_pbar.update(1)
 
     dist.all_reduce(all_metrics, op=dist.ReduceOp.SUM)
 
@@ -344,6 +346,7 @@ def fsdp_main(args, metric_logger):
         mixed_precision=mp_policy,
         sharding_strategy=sharding_strategy,
         device_id=torch.cuda.current_device(),
+        use_orig_params=True, 
     )
 
     if rank == 0:
@@ -367,22 +370,23 @@ def fsdp_main(args, metric_logger):
             model,
             rank,
             world_size,
-            train_loader,
-            opt_ae,
-            opt_disc,
+            data.train_loader,
+            model.opt_ae,
+            model.opt_disc,
             epoch,
+            metric_logger,
             sampler=train_sampler,
         )
         if should_validate(
-            config.train.val_check_interval, len(train_loader), epoch, model.step
+            config.train.val_check_interval, len(data.train_loader), epoch, model.step
         ):
             all_val_metrics = validation(
-                model, rank, world_size, val_loader, epoch, metric_logger
+                model, rank, world_size, data.val_loader, epoch, metric_logger
             )
             curr_val_loss = all_val_metrics["ae_loss"]
 
-        scheduler_ae.step()
-        scheduler_disc.step()
+        model.scheduler_ae.step()
+        model.scheduler_disc.step()
 
         dist.barrier()
 
