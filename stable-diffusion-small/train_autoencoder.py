@@ -276,19 +276,21 @@ def fsdp_main(args, metric_logger):
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
 
-    run_name = (
-        metric_logger.experiment.name
-        if isinstance(metric_logger.experiment.name, str)
-        else "default"
-    )
+    if rank == 0:
+        run_name = (
+            metric_logger.name
+            if isinstance(metric_logger.name, str)
+            else "default"
+        )
 
-    ckpt_dir = get_ckpt_dir(config, run_name)
+        ckpt_dir = get_ckpt_dir(config, run_name)
+    else:
+        run_name = "default"
+        ckpt_dir = "default"
 
     data = instantiate_object(config.data)
-
-    if rank == 0:
-        data.prepare_data()
-        data.setup("fit")
+    data.prepare_data()
+    data.setup("fit")
 
     if rank == 0:
         logger.info("Size of train dataset: ", len(data.train_ds))
@@ -299,7 +301,7 @@ def fsdp_main(args, metric_logger):
     )
     val_sampler = DistributedSampler(data.val_ds, rank=rank, num_replicas=world_size)
 
-    setup()
+    setup(rank, world_size)
 
     train_kwargs = {"sampler": train_sampler}
     test_kwargs = {"sampler": val_sampler}
@@ -343,6 +345,9 @@ def fsdp_main(args, metric_logger):
         sharding_strategy=sharding_strategy,
         device_id=torch.cuda.current_device(),
     )
+
+    if rank == 0:
+        metric_logger.watch(model)
 
     model.opt_ae, model.opt_disc, model.scheduler_ae, model.scheduler_disc = configure_optimizers(model)
 
@@ -451,12 +456,14 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    metric_logger = wandb.init(
-        project="stable_diffusion_autoencoder",
-        config=args,
-        prefix="pytorch",
-        save_dir="logs",
-    )
+
+    if int(os.environ["RANK"]) == 0:
+        metric_logger = wandb.init(
+            project="stable_diffusion_autoencoder",
+            config=args,
+        )
+    else:
+        metric_logger = None
 
     torch.manual_seed(args.seed)
 

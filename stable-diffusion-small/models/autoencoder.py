@@ -54,23 +54,19 @@ class VAutoEncoder(nn.Module):
         encoder_config,
         decoder_config,
         loss_config,
-        ckpt_dir: str,
         lr: float,
         min_beta: float,
         max_beta: float,
         kl_anneal_epochs: int,
-        accumulate_grad_batches: int,
     ):
         super().__init__()
 
         self.encoder_config = encoder_config
         self.decoder_config = decoder_config
-        self.ckpt_dir = ckpt_dir
         self.lr = lr
         self.min_beta = min_beta
         self.max_beta = max_beta
         self.kl_anneal_epochs = kl_anneal_epochs
-        self.accumulate_grad_batches = accumulate_grad_batches
 
         self.generator = Generator(encoder_config, decoder_config)
         self.discriminator = instantiate_object(loss_config)
