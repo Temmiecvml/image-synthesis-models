@@ -286,12 +286,11 @@ def fsdp_main(args, metric_logger):
 
     data = instantiate_object(config.data)
 
-    if local_rank == 0:
+    if rank == 0:
         data.prepare_data()
+        data.setup("fit")
 
-    data.setup("fit")
-
-    if local_rank == 0:
+    if rank == 0:
         logger.info("Size of train dataset: ", len(data.train_ds))
         logger.info("Size of Validation dataset: ", len(data.val_ds))
 
@@ -305,8 +304,8 @@ def fsdp_main(args, metric_logger):
     train_kwargs = {"sampler": train_sampler}
     test_kwargs = {"sampler": val_sampler}
 
-    train_loader = data.train_dataloader(**train_kwargs)
-    val_loader = data.val_dataloader(**test_kwargs)
+    data.train_loader = data.train_dataloader(**train_kwargs)
+    data.val_loader = data.val_dataloader(**test_kwargs)
 
     my_auto_wrap_policy = partial(
         size_based_auto_wrap_policy,
@@ -345,11 +344,11 @@ def fsdp_main(args, metric_logger):
         device_id=torch.cuda.current_device(),
     )
 
-    opt_ae, opt_disc, scheduler_ae, scheduler_disc = configure_optimizers(model)
+    model.opt_ae, model.opt_disc, model.scheduler_ae, model.scheduler_disc = configure_optimizers(model)
+
 
     if rank == 0:
         time_of_run = get_date_of_run()
-        training_start_time = time.time()
         dur = []
         mem_alloc_tracker = []
         mem_reserved_tracker = []

@@ -150,7 +150,6 @@ class AutoEncoderDataModule:
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             persistent_workers=self.num_workers > 0,
-            shuffle=True,
             **kwargs,
         )
 
