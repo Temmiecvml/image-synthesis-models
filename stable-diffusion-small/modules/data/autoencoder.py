@@ -1,9 +1,11 @@
+import os
 import sys
 from functools import partial
 
 import lightning as L
 import numpy as np
 import torch
+import pickle
 from datasets import Dataset as HfDataset
 from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset
@@ -116,32 +118,39 @@ class AutoEncoderDataModule:
             cache_dir=self.cache_dir,
         )
 
+        dataset = self.dataset.train_test_split(
+            test_size=self.train_val_split, shuffle=True, seed=32
+        )
+
+        with open("train.pkl", "wb") as file:
+            pickle.dump(dataset["train"], file)
+
+        with open("val.pkl", "wb") as file:
+            pickle.dump(dataset["test"], file)
+
     def setup(self, stage: str):
         """For loading and processing the dataset
 
         Huggingface API for downloading and loading is the same
         """
-        self.dataset = load_dataset(
-            self.data_path,
-            split="train",
-            cache_dir=self.cache_dir,
-        )
+        
+        with open("train.pkl", "rb") as file:
+            train_ds = pickle.load(file)
 
-        dataset = self.dataset.train_test_split(
-            test_size=self.train_val_split, shuffle=True, seed=32
-        )
+        with open("val.pkl", "rb") as file:
+            val_ds = pickle.load(file)
 
         if stage == "fit":
             self.train_ds = PytorchHuggingFaceDataset(
-                dataset["train"], self.preprocess_batch
+                train_ds, self.preprocess_batch
             )
             self.val_ds = PytorchHuggingFaceDataset(
-                dataset["test"], self.preprocess_batch
+                val_ds, self.preprocess_batch
             )
 
         if stage == "test":
             self.test_ds = PytorchHuggingFaceDataset(
-                dataset["test"], self.preprocess_batch
+                val_ds, self.preprocess_batch
             )
 
     def train_dataloader(self, **kwargs):

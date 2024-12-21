@@ -74,7 +74,7 @@ class VDecoder(nn.Module):
     ):
         super(VDecoder, self).__init__()
         self.up = Up(base_channels, num_groups)
-        self.post_quant_conv = torch.nn.Conv2d(z_dims, base_channels * 4, 1)
+        self.post_quant_conv = torch.nn.Conv2d(z_dims, base_channels * 4, kernel_size=1, bias=False)
         self.conv_out = nn.Conv2d(base_channels, 3, kernel_size=3, padding=1)
         self.z_scale_factor = z_scale_factor
 

@@ -72,7 +72,7 @@ class VEncoder(nn.Module):
     ):
         super(VEncoder, self).__init__()
         self.down = Down(base_channels, num_groups)
-        self.quant_conv = torch.nn.Conv2d(base_channels * 4, 2 * z_dims, 1)
+        self.quant_conv = nn.Conv2d(base_channels * 4, 2 * z_dims, kernel_size=1, bias=False)
         self.z_scale_factor = z_scale_factor
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor = None) -> torch.Tensor:
