@@ -228,24 +228,3 @@ class VAutoEncoder(L.LightningModule):
                 )
 
             fabric.barrier()
-
-    def configure_optimizers(self):
-        self.opt_ae = torch.optim.Adam(
-            list(self.generator.parameters()),
-            lr=self.lr,
-            betas=(0.5, 0.9),
-        )
-        self.opt_disc = torch.optim.Adam(
-            self.discriminator.discriminator.parameters(), lr=self.lr, betas=(0.5, 0.9)
-        )
-
-        self.scheduler_ae = torch.optim.lr_scheduler.StepLR(
-            self.opt_ae,
-            step_size=5,  # Number of epochs after which LR is reduced
-            gamma=0.5,  # Multiplicative factor for LR reduction
-        )
-        self.scheduler_disc = torch.optim.lr_scheduler.StepLR(
-            self.opt_disc,
-            step_size=5,
-            gamma=0.5,
-        )

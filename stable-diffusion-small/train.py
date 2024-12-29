@@ -129,17 +129,21 @@ def train_autoencoder(config, ckpt: str, seed: int, metric_logger):
             accumulate_grad_batches=config.train.accumulate_grad_batches,
         )
 
-    model.configure_optimizers()
     model.metric_logger = metric_logger
 
     data_module = instantiate_object(config.data)
 
+    # state = {
+    #     "model": model,
+    #     "opt_ae": model.opt_ae,
+    #     "opt_disc": model.opt_disc,
+    #     "scheduler_ae": model.scheduler_ae,
+    #     "scheduler_disc": model.scheduler_disc,
+    #     "epoch": model.epoch,
+    #     "step": model.step,
+    # }
     state = {
         "model": model,
-        "opt_ae": model.opt_ae,
-        "opt_disc": model.opt_disc,
-        "scheduler_ae": model.scheduler_ae,
-        "scheduler_disc": model.scheduler_disc,
         "epoch": model.epoch,
         "step": model.step,
     }
