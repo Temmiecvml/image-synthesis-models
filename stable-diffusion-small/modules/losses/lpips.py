@@ -113,6 +113,11 @@ class ScalingLayer(nn.Module):
             "scale", torch.Tensor([0.458, 0.448, 0.450])[None, :, None, None]
         )
 
+    def reset_parameters(self):
+        for module in self.children():
+            if hasattr(module, "reset_parameters"):
+                module.reset_parameters()
+
     def forward(self, inp):
         return (inp - self.shift) / self.scale
 

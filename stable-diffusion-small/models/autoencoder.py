@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
+
 from utils import instantiate_object, log_reconstruction
 
 
@@ -123,7 +124,7 @@ class VAutoEncoder(L.LightningModule):
                 log_dict_ae["ae_lr"] = self.opt_ae.param_groups[0]["lr"]
                 fabric.log_dict(log_dict_ae)
                 fabric.log("aeloss", aeloss)
-                
+
                 self.opt_disc.zero_grad()
                 discloss, log_dict_disc = self.discriminator(
                     x,
@@ -138,7 +139,6 @@ class VAutoEncoder(L.LightningModule):
                 fabric.backward(discloss)
                 log_dict_disc["disc_lr"] = self.opt_disc.param_groups[0]["lr"]
                 fabric.log_dict(log_dict_disc)
-                
 
                 if should_validate(
                     val_check_interval, steps_per_epoch, self.epoch, self.step
@@ -159,7 +159,7 @@ class VAutoEncoder(L.LightningModule):
     ):
 
         metric_values = [1e10, 1e10]
-       
+
         for batch_idx, (x, _) in enumerate(val_dataloader):
             recon_x, z, mu, log_var = self.generator(x)
             posterior = Posterior(z, mu, log_var)

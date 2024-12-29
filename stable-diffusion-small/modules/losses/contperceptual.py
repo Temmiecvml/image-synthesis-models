@@ -1,8 +1,9 @@
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
-from modules.losses.lpips import LPIPS
+import torch.nn.functional as F
+
 from modules.discriminator.model import NLayerDiscriminator, weights_init
+from modules.losses.lpips import LPIPS
 
 
 def l1(x, y):
@@ -78,6 +79,11 @@ class LPIPSWithDiscriminator(nn.Module):
         self.disc_factor = disc_factor
         self.discriminator_weight = disc_weight
         self.disc_conditional = disc_conditional
+
+    def reset_parameters(self):
+        for module in self.children():
+            if hasattr(module, "reset_parameters"):
+                module.reset_parameters()
 
     def calculate_adaptive_weight(self, nll_loss, g_loss, last_layer=None):
         if last_layer is not None:

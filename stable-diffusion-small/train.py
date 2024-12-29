@@ -1,25 +1,56 @@
 import argparse
+import re
 from functools import partial
 
 import lightning as L
 import torch
-import re
 import torch.nn as nn
 from dotenv import load_dotenv
+from lightning.fabric.strategies import FSDPStrategy as FabricFSDPStrategy
 from lightning.pytorch import seed_everything
-from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
+from lightning.pytorch.callbacks import (EarlyStopping, ModelCheckpoint,
+                                         RichProgressBar)
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.strategies import FSDPStrategy
-from lightning.fabric.strategies import FSDPStrategy as FabricFSDPStrategy
-from modules.autoencoder.attention_block import VAttentionBlock
-from modules.autoencoder.residual_block import VResidualBlock
 from omegaconf import OmegaConf
 from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
-from utils import instantiate_object, logger, get_available_device, get_ckpt_dir
+
+from modules.autoencoder.attention_block import VAttentionBlock
+from modules.autoencoder.residual_block import VResidualBlock
+from utils import (get_available_device, get_ckpt_dir, instantiate_object,
+                   logger)
 
 load_dotenv()  # set WANDB_API_KEY as env
 
 torch.set_float32_matmul_precision("medium")
+
+
+def configure_optimizers(
+    generator,
+    discriminator,
+    lr,
+):
+    opt_ae = torch.optim.Adam(
+        list(generator.parameters()),
+        lr=lr,
+        betas=(0.5, 0.9),
+    )
+    opt_disc = torch.optim.Adam(
+        discriminator.discriminator.parameters(), lr=lr, betas=(0.5, 0.9)
+    )
+
+    scheduler_ae = torch.optim.lr_scheduler.StepLR(
+        opt_ae,
+        step_size=5,  # Number of epochs after which LR is reduced
+        gamma=0.5,  # Multiplicative factor for LR reduction
+    )
+    scheduler_disc = torch.optim.lr_scheduler.StepLR(
+        opt_disc,
+        step_size=5,
+        gamma=0.5,
+    )
+
+    return opt_ae, opt_disc, scheduler_ae, scheduler_disc
 
 
 def get_epoch_and_step(ckpt_path):
@@ -33,7 +64,7 @@ def get_epoch_and_step(ckpt_path):
         raise ValueError(f"Checkpoint path does not match expected format: {ckpt_path}")
 
     epoch = int(match.group(1))
-    step = int(match.group(2)) 
+    step = int(match.group(2))
 
     return epoch, step
 
@@ -82,11 +113,11 @@ def train_autoencoder(config, ckpt: str, seed: int, metric_logger):
         accelerator=config.train.accelerator,
         devices="auto",
         precision=(
-            "32-true" if config.train.accelerator == "mps" or torch.cuda.device_count() == 1 else config.train.precision
+            "32-true"
+            if config.train.accelerator == "mps" or torch.cuda.device_count() == 1
+            else config.train.precision
         ),
-        strategy=get_fsdp_strategy(
-            "autoencoder", config.train.min_wrap_params
-        )
+        strategy=get_fsdp_strategy("autoencoder", config.train.min_wrap_params),
     )
 
     fabric.launch()
@@ -130,10 +161,14 @@ def train_autoencoder(config, ckpt: str, seed: int, metric_logger):
     train_loader = data_module.train_dataloader()
     val_loader = data_module.val_dataloader()
 
-    model.generator, model.opt_ae = fabric.setup(model.generator, model.opt_ae)
-    model.discriminator, model.opt_disc = fabric.setup(
-        model.discriminator, model.opt_disc
+    model.generator = fabric.setup_module(model.generator)
+    model.discriminator = fabric.setup_module(model.discriminator)
+
+    opt_ae, opt_disc, model.scheduler_ae, model.scheduler_disc = configure_optimizers(
+        model.generator, model.discriminator, model.lr
     )
+    model.opt_ae = fabric.setup_optimizers(opt_ae)
+    model.opt_disc = fabric.setup_optimizers(opt_disc)
     train_loader = fabric.setup_dataloaders(train_loader)
     val_loader = fabric.setup_dataloaders(val_loader)
 
@@ -263,7 +298,7 @@ if __name__ == "__main__":
         kwargs = {}
 
     wandb_logger = WandbLogger(
-        project=f"poc_local_stable_diffusion_{config.train.model_name}",
+        project=f"bugfix_autoencoder_{config.train.model_name}",
         prefix="poc",
         save_dir="logs",
         **kwargs,
