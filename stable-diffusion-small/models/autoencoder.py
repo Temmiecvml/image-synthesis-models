@@ -121,9 +121,11 @@ class VAutoEncoder(L.LightningModule):
                 )
                 fabric.backward(aeloss)
                 self.opt_ae.step()
-                log_dict_ae["ae_lr"] = self.opt_ae.param_groups[0]["lr"]
-                fabric.log_dict(log_dict_ae)
-                fabric.log("aeloss", aeloss)
+                with fabric.rank_zero_first():
+                    log_dict_ae["ae_lr"] = self.opt_ae.param_groups[0]["lr"]
+                    for k, v in log_dict_ae.items():
+                        fabric.log(k, v)
+                    fabric.log("aeloss", aeloss)
 
                 self.opt_disc.zero_grad()
                 discloss, log_dict_disc = self.discriminator(
@@ -132,13 +134,16 @@ class VAutoEncoder(L.LightningModule):
                     posterior,
                     optimizer_idx=1,
                     global_step=self.step,
-                    last_layer=self.get_last_layer(),
+                    last_layer=None,
                     split="train",
                 )
 
                 fabric.backward(discloss)
-                log_dict_disc["disc_lr"] = self.opt_disc.param_groups[0]["lr"]
-                fabric.log_dict(log_dict_disc)
+                with fabric.rank_zero_first():
+                    log_dict_disc["disc_lr"] = self.opt_disc.param_groups[0]["lr"]
+                    for k, v in log_dict_disc.items():
+                        fabric.log(k, v)
+                    fabric.log("discloss", discloss)
 
                 if should_validate(
                     val_check_interval, steps_per_epoch, self.epoch, self.step

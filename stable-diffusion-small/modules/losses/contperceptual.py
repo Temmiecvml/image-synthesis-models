@@ -86,6 +86,8 @@ class LPIPSWithDiscriminator(nn.Module):
                 module.reset_parameters()
 
     def calculate_adaptive_weight(self, nll_loss, g_loss, last_layer=None):
+
+        return torch.tensor(1.0)
         if last_layer is not None:
             nll_grads = torch.autograd.grad(nll_loss, last_layer, retain_graph=True)[0]
             g_grads = torch.autograd.grad(g_loss, last_layer, retain_graph=True)[0]
