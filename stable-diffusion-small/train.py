@@ -10,7 +10,7 @@ from lightning.fabric.strategies import FSDPStrategy as FabricFSDPStrategy
 from lightning.pytorch import seed_everything
 from lightning.pytorch.callbacks import (EarlyStopping, ModelCheckpoint,
                                          RichProgressBar)
-from lightning.pytorch.loggers import WandbLogger
+from wandb.integration.lightning.fabric import WandbLogger
 from lightning.pytorch.strategies import FSDPStrategy
 from omegaconf import OmegaConf
 from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy

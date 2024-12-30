@@ -42,7 +42,7 @@ model:
     loss_config:
       target: modules.losses.contperceptual.LPIPSWithDiscriminator
       params:
-        disc_start: 5000
+        disc_start: 200
         kl_weight: 1e-5
         disc_weight: 0.5
 
