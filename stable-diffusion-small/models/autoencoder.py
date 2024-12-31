@@ -122,10 +122,8 @@ class VAutoEncoder(L.LightningModule):
                 fabric.backward(aeloss)
                 self.opt_ae.step()
                 log_dict_ae["ae_lr"] = self.opt_ae.param_groups[0]["lr"]
-                fabric.log_dict(log_dict_ae)
-                fabric.log("aeloss", aeloss)
-                print(f"step {self.step}, aeloss {aeloss}")
-
+                fabric.log_dict(log_dict_ae, step=self.step)
+                fabric.log("aeloss", aeloss, step=self.step)
                 self.opt_disc.zero_grad()
                 discloss, log_dict_disc = self.discriminator(
                     x,
@@ -139,9 +137,8 @@ class VAutoEncoder(L.LightningModule):
 
                 fabric.backward(discloss)
                 log_dict_disc["disc_lr"] = self.opt_disc.param_groups[0]["lr"]
-                fabric.log_dict(log_dict_disc)
-                fabric.log("discloss", discloss)
-                print(f"step {self.step}, discloss {discloss}")
+                fabric.log_dict(log_dict_disc, step=self.step)
+                fabric.log("discloss", discloss, step=self.step)
 
                 if should_validate(
                     val_check_interval, steps_per_epoch, self.epoch, self.step
@@ -162,11 +159,9 @@ class VAutoEncoder(L.LightningModule):
     ):
 
         metric_values = [1e10, 1e10]
-
         for batch_idx, (x, _) in enumerate(val_dataloader):
             recon_x, z, mu, log_var = self.generator(x)
             posterior = Posterior(z, mu, log_var)
-
             aeloss, log_dict_ae = self.discriminator(
                 x,
                 recon_x,
@@ -176,11 +171,8 @@ class VAutoEncoder(L.LightningModule):
                 last_layer=self.get_last_layer(),
                 split="val",
             )
-
-            print(f"step {batch_idx}, val-aeloss ", aeloss)
-            fabric.log_dict(log_dict_ae)
-            fabric.log("aeloss", aeloss)
-
+            fabric.log_dict(log_dict_ae, step=self.step)
+            fabric.log("aeloss", aeloss, step=self.step)
             discloss, log_dict_disc = self.discriminator(
                 x,
                 recon_x,
@@ -190,15 +182,16 @@ class VAutoEncoder(L.LightningModule):
                 last_layer=self.get_last_layer(),
                 split="val",
             )
-
-            print(f"step {batch_idx}, val-discloss ", discloss)
-            fabric.log_dict(log_dict_disc)
-            fabric.log("discloss", discloss)
-
-            metric = log_dict_ae.get(metric_to_monitor, "")
-            if not metric:
-                metric = log_dict_disc[metric_to_monitor]
-
+            fabric.log_dict(log_dict_disc, step=self.step)
+            fabric.log("discloss", discloss, step=self.step)
+            if fabric.is_global_zero and batch_idx == 0:
+                log_reconstruction(
+                    self.metric_logger, x, recon_x, self.epoch, self.step
+                )
+        metric = log_dict_ae.get(metric_to_monitor, "")
+        if not metric:
+            metric = log_dict_disc[metric_to_monitor]
+        
         if fabric.is_global_zero:
             state = {
                 "model": self,
@@ -213,18 +206,15 @@ class VAutoEncoder(L.LightningModule):
             # save if metric better than previous values
             second_best_prev = max(metric_values)
             id_second_best_prev = metric_values.index(second_best_prev)
+            print(f"second_best_prev {second_best_prev}")
+            print(f"id_second_best_prev {id_second_best_prev}")
 
-        #     if metric < min(metric_values):
-        #         fabric.save(
-        #             f"{self.ckpt_dir}/autoencoder-epoch={self.epoch:02d}-step={self.step:06d}-{metric_to_monitor}={metric:.2f}.ckpt",
-        #             state,
-        #         )
-        #         metric_values[id_second_best_prev] = metric
-        #         print(f"Saved model with improved metric {metric}")
-
-        # if fabric.is_global_zero and batch_idx == 0:
-        #     log_reconstruction(
-        #         self.metric_logger, x, recon_x, self.epoch, self.step
-        #     )
-
+            if metric < second_best_prev:
+                fabric.save(
+                    f"{self.ckpt_dir}/autoencoder-epoch={self.epoch:02d}-step={self.step:06d}-{metric_to_monitor}={metric:.2f}.ckpt",
+                    state,
+                )
+                metric_values[id_second_best_prev] = metric
+                print(f"Saved model with improved metric {metric}")
+        
         fabric.barrier()

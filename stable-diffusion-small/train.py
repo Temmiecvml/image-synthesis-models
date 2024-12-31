@@ -118,6 +118,7 @@ def train_autoencoder(config, ckpt: str, seed: int, metric_logger):
             else config.train.precision
         ),
         strategy=get_fsdp_strategy("autoencoder", config.train.min_wrap_params),
+        loggers=metric_logger
     )
 
     fabric.launch()
