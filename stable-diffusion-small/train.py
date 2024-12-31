@@ -8,17 +8,14 @@ import torch.nn as nn
 from dotenv import load_dotenv
 from lightning.fabric.strategies import FSDPStrategy as FabricFSDPStrategy
 from lightning.pytorch import seed_everything
-from lightning.pytorch.callbacks import (EarlyStopping, ModelCheckpoint,
-                                         RichProgressBar)
-from wandb.integration.lightning.fabric import WandbLogger
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from lightning.pytorch.strategies import FSDPStrategy
-from omegaconf import OmegaConf
-from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
-
 from modules.autoencoder.attention_block import VAttentionBlock
 from modules.autoencoder.residual_block import VResidualBlock
-from utils import (get_available_device, get_ckpt_dir, instantiate_object,
-                   logger)
+from omegaconf import OmegaConf
+from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
+from utils import get_available_device, get_ckpt_dir, instantiate_object, logger
+from wandb.integration.lightning.fabric import WandbLogger
 
 load_dotenv()  # set WANDB_API_KEY as env
 
@@ -118,7 +115,7 @@ def train_autoencoder(config, ckpt: str, seed: int, metric_logger):
             else config.train.precision
         ),
         strategy=get_fsdp_strategy("autoencoder", config.train.min_wrap_params),
-        loggers=metric_logger
+        loggers=metric_logger,
     )
 
     fabric.launch()

@@ -5,10 +5,14 @@ import lightning as L
 import numpy as np
 import torch
 import torch.nn.functional as F
-
-from utils import (extract_into_tensor, instantiate_object,
-                   load_first_stage_component, logger, make_beta_schedule,
-                   timestep_embedding)
+from utils import (
+    extract_into_tensor,
+    instantiate_object,
+    load_first_stage_component,
+    logger,
+    make_beta_schedule,
+    timestep_embedding,
+)
 
 
 class LDM(L.LightningModule):

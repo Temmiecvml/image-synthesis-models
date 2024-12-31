@@ -5,10 +5,14 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 from tqdm import tqdm
-
-from utils import (extract_into_tensor, load_first_stage_component,
-                   load_images_to_tensor, logger, make_beta_schedule,
-                   tensor_to_pil_images)
+from utils import (
+    extract_into_tensor,
+    load_first_stage_component,
+    load_images_to_tensor,
+    logger,
+    make_beta_schedule,
+    tensor_to_pil_images,
+)
 
 
 def process_prompt(prompt: str, cfg_scale: float):

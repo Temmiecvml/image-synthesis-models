@@ -3,23 +3,26 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
-
 from utils import instantiate_object, log_reconstruction
 
 
 def should_validate(val_check_interval, steps_per_epoch, epoch, step):
-    if val_check_interval > 0 and val_check_interval < 1:
-        val_check_interval = int(steps_per_epoch * val_check_interval)
-        if step == val_check_interval:
-            return True
-
-    elif val_check_interval >= 1:
-        if val_check_interval == epoch:
-            return True
-    else:
+    if val_check_interval <= 0:
         raise ValueError(
             f"val_check_interval: {val_check_interval} should be greater than 0"
         )
+
+    if 0 < val_check_interval < 1:
+        interval_steps = int(steps_per_epoch * val_check_interval)
+        if interval_steps == 0:
+            raise ValueError(
+                "val_check_interval is too small for the given steps_per_epoch."
+            )
+        current_epoch_step = step - (epoch - 1) * steps_per_epoch
+        return current_epoch_step > 0 and current_epoch_step % interval_steps == 0
+
+    if val_check_interval >= 1:
+        return epoch % int(val_check_interval) == 0
 
     return False
 
@@ -191,7 +194,7 @@ class VAutoEncoder(L.LightningModule):
         metric = log_dict_ae.get(metric_to_monitor, "")
         if not metric:
             metric = log_dict_disc[metric_to_monitor]
-        
+
         if fabric.is_global_zero:
             state = {
                 "model": self,
@@ -208,13 +211,12 @@ class VAutoEncoder(L.LightningModule):
             id_second_best_prev = metric_values.index(second_best_prev)
             print(f"second_best_prev {second_best_prev}")
             print(f"id_second_best_prev {id_second_best_prev}")
+            print(f"metric value {metric}")
 
-            if metric < second_best_prev:
-                fabric.save(
-                    f"{self.ckpt_dir}/autoencoder-epoch={self.epoch:02d}-step={self.step:06d}-{metric_to_monitor}={metric:.2f}.ckpt",
-                    state,
-                )
-                metric_values[id_second_best_prev] = metric
-                print(f"Saved model with improved metric {metric}")
-        
-        fabric.barrier()
+            # if metric < second_best_prev:
+            #     fabric.save(
+            #         f"{self.ckpt_dir}/autoencoder-epoch={self.epoch:02d}-step={self.step:06d}-{metric_to_monitor}={metric:.2f}.ckpt",
+            #         state,
+            #     )
+            #     metric_values[id_second_best_prev] = metric
+            #     print(f"Saved model with improved metric {metric}")

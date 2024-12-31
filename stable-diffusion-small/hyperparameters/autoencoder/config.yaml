@@ -20,7 +20,7 @@ train:
 model:
   target: models.autoencoder.VAutoEncoder
   params:
-    lr: 1e-5
+    lr: 5e-4
     min_beta: 1e-3
     max_beta: 1e-1
     kl_anneal_epochs: 10

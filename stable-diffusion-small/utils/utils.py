@@ -5,10 +5,9 @@ import random
 from typing import Optional
 
 import torch
+import wandb
 from PIL import Image
 from torchvision import transforms
-
-import wandb
 
 
 def log_reconstruction(
