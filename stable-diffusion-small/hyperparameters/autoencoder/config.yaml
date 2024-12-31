@@ -1,8 +1,8 @@
 shared_configs:
   image_size: 256
-  base_channels: 16 # 192
-  num_groups: 8
-  z_dims: 8
+  base_channels: 96 # 192
+  num_groups: 32
+  z_dims: 16
   z_scale_factor: 1 # 0.18215
 
 train:

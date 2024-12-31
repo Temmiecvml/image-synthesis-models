@@ -212,11 +212,12 @@ class VAutoEncoder(L.LightningModule):
             print(f"second_best_prev {second_best_prev}")
             print(f"id_second_best_prev {id_second_best_prev}")
             print(f"metric value {metric}")
+            print(f"metric values {metric_values}")
 
-            # if metric < second_best_prev:
-            #     fabric.save(
-            #         f"{self.ckpt_dir}/autoencoder-epoch={self.epoch:02d}-step={self.step:06d}-{metric_to_monitor}={metric:.2f}.ckpt",
-            #         state,
-            #     )
-            #     metric_values[id_second_best_prev] = metric
-            #     print(f"Saved model with improved metric {metric}")
+            if metric < second_best_prev:
+                # fabric.save(
+                #     f"{self.ckpt_dir}/autoencoder-epoch={self.epoch:02d}-step={self.step:06d}-{metric_to_monitor}={metric:.2f}.ckpt",
+                #     state,
+                # )
+                metric_values[id_second_best_prev] = metric
+                print(f"Saved model with improved metric {metric}")
